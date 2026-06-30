@@ -9,6 +9,8 @@ Unicity **"Build the machine economy"** builder campaign.
 
 **Submission track:** Autonomous agents · **Runs on:** Unicity testnet2
 
+**🔴 Live dashboard:** **https://sphere-agent-bazaar-dashboard.vercel.app/**
+
 ---
 
 ## The idea
@@ -147,7 +149,9 @@ All config lives in `.env` (see `.env.example`). Notable values:
       that streams the economy over SSE — agent flow with value pulses, a job board
       with the risk pipeline, and a live event feed. Agents emit structured events
       to a shared log; the dashboard server tails and broadcasts them.
-- [ ] **M3.1 — ship:** deploy the dashboard publicly, list on `sphere-apps`, add OSV.dev CVE signals.
+- [x] **M3.1 — shipped:** dashboard deployed publicly at
+      [sphere-agent-bazaar-dashboard.vercel.app](https://sphere-agent-bazaar-dashboard.vercel.app/)
+      (replays a real testnet2 run). Next: list on `sphere-apps`, add OSV.dev CVE signals.
 - [ ] **M4 — stretch:** escrow-swap settlement, AstridOS runtime, Gemini summaries.
 
 ## License

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Sphere Agent Bazaar">
+  <defs>
+    <radialGradient id="bz" cx="30%" cy="28%" r="85%">
+      <stop offset="0%" stop-color="#ff9a4d" />
+      <stop offset="55%" stop-color="#ff6f00" />
+      <stop offset="100%" stop-color="#932d00" />
+    </radialGradient>
+  </defs>
+  <rect width="128" height="128" rx="30" fill="#060606" />
+  <rect x="12" y="12" width="104" height="104" rx="24" fill="url(#bz)" />
+  <!-- connecting wire between two agents -->
+  <rect x="40" y="60.5" width="48" height="7" rx="3.5" fill="#0a0a0a" opacity="0.85" />
+  <!-- two agent nodes -->
+  <circle cx="42" cy="64" r="16" fill="#060606" />
+  <circle cx="86" cy="64" r="16" fill="#060606" />
+  <!-- value pulse in transit -->
+  <circle cx="64" cy="64" r="7" fill="#fefefe" />
+</svg>
