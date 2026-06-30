@@ -11,6 +11,8 @@ Unicity **"Build the machine economy"** builder campaign.
 
 **🔴 Live dashboard:** **https://sphere-agent-bazaar-dashboard.vercel.app/**
 
+[![CI](https://github.com/eren-karakus0/sphere-agent-bazaar/actions/workflows/ci.yml/badge.svg)](https://github.com/eren-karakus0/sphere-agent-bazaar/actions/workflows/ci.yml)
+
 ---
 
 ## The idea
