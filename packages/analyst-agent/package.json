@@ -1,0 +1,20 @@
+{
+  "name": "@bazaar/analyst-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Repo Risk Analyst — a provider agent that sells GitHub repository risk analysis on the Unicity network.",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@bazaar/core": "workspace:*",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
