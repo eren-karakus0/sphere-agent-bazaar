@@ -19,8 +19,9 @@ Everything needed to submit **Sphere Agent Bazaar** to the Unicity
 
 Sphere Agent Bazaar is an on-network **agent service marketplace**. A budgeted
 treasury agent, **AlphaScout**, discovers a **Repo Risk Analyst** provider on the
-Unicity market, hires it to score the maintenance & security risk of GitHub repos,
-pays per job via on-chain payment requests, and collects the reports — with no
+Unicity market, hires it to score the maintenance & security risk of GitHub repos
+(including a real dependency-CVE scan via OSV.dev), pays per job via on-chain
+payment requests, and collects the reports — with no
 human approving individual transactions. Value moves between two autonomous agents
 peer-to-peer; a live control-room dashboard streams the whole economy.
 

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseRepoUrl } from '../src/analysis/repo-url';
 import { scoreRepo } from '../src/analysis/scoring';
+import { cleanVersion, parseNpmManifest } from '../src/analysis/osv';
 import type { RepoMeta } from '../src/analysis/github';
 
 describe('parseRepoUrl (SSRF guard)', () => {
@@ -76,5 +77,33 @@ describe('scoreRepo', () => {
       now,
     );
     expect(r.score).toBeLessThanOrEqual(100);
+  });
+});
+
+describe('osv manifest parsing', () => {
+  it('cleans npm version ranges to a concrete semver', () => {
+    expect(cleanVersion('^1.2.3')).toBe('1.2.3');
+    expect(cleanVersion('~4.5.6')).toBe('4.5.6');
+    expect(cleanVersion('>=10.0.0 <11')).toBe('10.0.0');
+    expect(cleanVersion('latest')).toBeNull();
+    expect(cleanVersion('*')).toBeNull();
+  });
+
+  it('extracts dependencies and devDependencies', () => {
+    const pkg = JSON.stringify({
+      name: 'demo',
+      dependencies: { react: '^18.3.1', lodash: '4.17.20' },
+      devDependencies: { vite: '^5.4.0' },
+    });
+    const deps = parseNpmManifest(pkg);
+    const names = deps.map((d) => d.name);
+    expect(names).toContain('react');
+    expect(names).toContain('lodash');
+    expect(names).toContain('vite');
+    expect(deps.find((d) => d.name === 'lodash')?.version).toBe('4.17.20');
+  });
+
+  it('returns an empty list for invalid json', () => {
+    expect(parseNpmManifest('{not json')).toEqual([]);
   });
 });

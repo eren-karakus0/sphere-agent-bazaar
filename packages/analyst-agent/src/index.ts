@@ -53,8 +53,8 @@ async function main(): Promise<void> {
     providerNametag: agent.nametag,
     description:
       'Repo Risk Analysis — score the maintenance & security risk of any public ' +
-      'GitHub repo (archived / stale / license / activity signals) and return a ' +
-      'structured report. Pay per analysis.',
+      'GitHub repo (archived / stale / license / activity signals + a real ' +
+      'dependency-CVE scan via OSV.dev) and return a structured report. Pay per analysis.',
   };
   await postServiceListing(agent, listing, { expiresInDays: 7 });
   log.info(`service posted to market @ ${PRICE_UCT} UCT/analysis`);

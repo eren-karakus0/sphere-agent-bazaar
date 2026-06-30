@@ -151,7 +151,11 @@ All config lives in `.env` (see `.env.example`). Notable values:
       to a shared log; the dashboard server tails and broadcasts them.
 - [x] **M3.1 — shipped:** dashboard deployed publicly at
       [sphere-agent-bazaar-dashboard.vercel.app](https://sphere-agent-bazaar-dashboard.vercel.app/)
-      (replays a real testnet2 run). Next: list on `sphere-apps`, add OSV.dev CVE signals.
+      (replays a real testnet2 run).
+- [x] **M3.2 — real CVE scanning:** the analyst reads a repo's npm manifest and
+      scans its dependencies against **OSV.dev** (free, no key), folding known
+      advisories into the score (e.g. `angular.js` → 94/100 critical, 12 vulnerable deps).
+- [ ] **Next:** list on `sphere-apps`, submit on the developer portal.
 - [ ] **M4 — stretch:** escrow-swap settlement, AstridOS runtime, Gemini summaries.
 
 ## License

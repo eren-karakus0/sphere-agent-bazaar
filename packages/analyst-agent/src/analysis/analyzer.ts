@@ -1,7 +1,8 @@
-import { createSummarizer, type RepoRiskReport } from '@bazaar/core';
+import { createSummarizer, type RepoRiskReport, type RiskSignal } from '@bazaar/core';
 import { parseRepoUrl } from './repo-url.js';
 import { fetchRepoMeta } from './github.js';
-import { scoreRepo } from './scoring.js';
+import { scoreRepo, bandFor } from './scoring.js';
+import { scanDependencies } from './osv.js';
 
 export interface AnalyzeOptions {
   githubToken?: string;
@@ -13,12 +14,32 @@ export interface AnalyzeOptions {
  * Repo Risk Analyst sells on the network.
  *
  * Flow: SSRF-guarded URL parse → free GitHub metadata → deterministic score →
- * natural-language summary (Gemini, or templated fallback).
+ * free OSV.dev dependency-CVE scan → natural-language summary.
  */
 export async function analyzeRepo(repoUrl: string, opts: AnalyzeOptions = {}): Promise<RepoRiskReport> {
   const ref = parseRepoUrl(repoUrl); // SSRF guard — throws on non-github input
   const meta = await fetchRepoMeta(ref, opts.githubToken);
-  const { score, band, signals } = scoreRepo(meta);
+
+  const base = scoreRepo(meta);
+  const signals: RiskSignal[] = [...base.signals];
+
+  // Real dependency-vulnerability scan via OSV.dev (free, best-effort).
+  try {
+    const osv = await scanDependencies(ref, opts.githubToken);
+    if (osv && osv.vulnerableCount > 0) {
+      const sample = osv.sampleIds.slice(0, 3).join(', ');
+      signals.push({
+        name: 'dependency-cves',
+        detail: `${osv.vulnerableCount} of ${osv.totalQueried} dependencies have known advisories${sample ? ` (e.g. ${sample})` : ''}`,
+        weight: Math.min(34, osv.vulnerableCount * 4),
+      });
+    }
+  } catch {
+    /* OSV / manifest fetch is best-effort and never blocks a report */
+  }
+
+  const score = Math.min(100, signals.reduce((sum, s) => sum + s.weight, 0));
+  const band = bandFor(score);
 
   const summarizer = createSummarizer(opts.gemini ?? { model: 'gemini-2.0-flash' });
   const summary = await summarizer.summarize({

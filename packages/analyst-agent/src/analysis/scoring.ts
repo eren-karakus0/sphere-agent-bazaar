@@ -14,7 +14,7 @@ function daysSince(iso: string | null, now: number): number | null {
   return Math.floor((now - t) / 86_400_000);
 }
 
-function bandFor(score: number): RiskBand {
+export function bandFor(score: number): RiskBand {
   if (score >= 70) return 'critical';
   if (score >= 45) return 'high';
   if (score >= 20) return 'medium';
