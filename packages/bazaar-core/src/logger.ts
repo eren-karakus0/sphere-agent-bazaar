@@ -20,7 +20,7 @@ export class Logger {
     if (LEVEL_ORDER[level] < LEVEL_ORDER[this.minLevel]) return;
     const ts = new Date().toISOString().slice(11, 19);
     const line = `${ts} [${this.prefix}] ${msg}`;
-    // eslint-disable-next-line no-console
+     
     const sink = level === 'error' ? console.error : level === 'warn' ? console.warn : console.log;
     sink(line, ...rest);
   }

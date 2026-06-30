@@ -89,7 +89,7 @@ async function main(): Promise<void> {
 // event loop can stay non-empty, so we exit explicitly. A watchdog guarantees
 // the process can never hang forever on a stuck network call.
 const watchdog = setTimeout(() => {
-  // eslint-disable-next-line no-console
+   
   console.error('[smoke] watchdog: 120s elapsed, forcing exit');
   process.exit(2);
 }, 120_000);
@@ -101,7 +101,7 @@ main()
     process.exit(0);
   })
   .catch((err) => {
-    // eslint-disable-next-line no-console
+     
     console.error('[smoke] FAILED:', err);
     process.exit(1);
   });

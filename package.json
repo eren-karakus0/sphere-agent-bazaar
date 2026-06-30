@@ -10,9 +10,19 @@
   "packageManager": "pnpm@10.28.1",
   "scripts": {
     "typecheck": "pnpm -r typecheck",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "pnpm --filter @bazaar/core test",
+    "check": "pnpm lint && pnpm typecheck && pnpm test",
     "smoke": "pnpm --filter @bazaar/core smoke",
     "analyst": "pnpm --filter @bazaar/analyst-agent start",
     "alphascout": "pnpm --filter @bazaar/alphascout-agent start"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "eslint": "^9.17.0",
+    "globals": "^15.14.0",
+    "typescript-eslint": "^8.18.1"
   },
   "license": "MIT"
 }
