@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useEventStream } from './hooks/useEventStream';
+import { useEventStream, type FeedMode } from './hooks/useEventStream';
 import {
   bandColor,
   deriveAgents,
@@ -16,7 +16,7 @@ const fmtTime = (ts: number) =>
   new Date(ts).toISOString().slice(11, 19);
 
 export function App() {
-  const { events, connected } = useEventStream();
+  const { events, mode } = useEventStream();
 
   const jobs = useMemo(() => deriveJobs(events), [events]);
   const agents = useMemo(() => deriveAgents(events), [events]);
@@ -27,7 +27,7 @@ export function App() {
 
   return (
     <div className="app">
-      <Header connected={connected} />
+      <Header mode={mode} />
       <StatBar stats={stats} />
       <div className="grid">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -42,12 +42,14 @@ export function App() {
 }
 
 /* ---------------- Header ---------------- */
-function Header({ connected }: { connected: boolean }) {
+function Header({ mode }: { mode: FeedMode }) {
   const [clock, setClock] = useState(() => new Date().toISOString().slice(11, 19));
   useEffect(() => {
     const t = setInterval(() => setClock(new Date().toISOString().slice(11, 19)), 1000);
     return () => clearInterval(t);
   }, []);
+  const label = mode === 'live' ? 'Live' : mode === 'replay' ? 'Replay' : 'Connecting';
+  const cls = mode === 'live' ? '' : mode === 'replay' ? ' live--replay' : ' live--off';
   return (
     <header className="hdr">
       <div className="hdr__mark">B</div>
@@ -59,9 +61,9 @@ function Header({ connected }: { connected: boolean }) {
       </div>
       <div className="hdr__right">
         <span className="hdr__clock">{clock} UTC</span>
-        <span className={`live${connected ? '' : ' live--off'}`}>
+        <span className={`live${cls}`}>
           <span className="live__dot" />
-          {connected ? 'Live' : 'Offline'}
+          {label}
         </span>
       </div>
     </header>
