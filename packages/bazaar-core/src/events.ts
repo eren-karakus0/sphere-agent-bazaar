@@ -2,9 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 /**
- * Lightweight append-only event log. Agents emit structured economy events to a
- * shared JSONL file; the dashboard server tails it and streams to the UI. This
- * is telemetry only — emitting must never throw into the agent's hot path.
+ * Economy event bus. Agents emit structured events; consumers subscribe (the
+ * live backend's SSE stream) and/or the events are appended to a JSONL file
+ * (the local dashboard server tails it). Telemetry only — never throws into the
+ * agent's hot path.
  */
 export type BazaarEventType =
   | 'agent:online'
@@ -33,29 +34,66 @@ export interface BazaarEvent {
   detail?: string;
 }
 
-export interface EventLog {
-  readonly path: string;
+export type EventListener = (ev: BazaarEvent) => void;
+
+export interface EventBus {
   emit(ev: Omit<BazaarEvent, 'ts'>): void;
+  /** Subscribe to new events. Returns an unsubscribe function. */
+  subscribe(fn: EventListener): () => void;
+  /** Recent events (newest last), for replaying history to a new subscriber. */
+  recent(limit?: number): BazaarEvent[];
+  readonly file?: string;
 }
 
 export function eventLogPath(dataRoot: string): string {
   return path.join(dataRoot, 'events.jsonl');
 }
 
-export function createEventLog(filePath: string): EventLog {
-  try {
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  } catch {
-    /* ignore */
+export function createEventBus(opts: { file?: string; keep?: number } = {}): EventBus {
+  const subscribers = new Set<EventListener>();
+  const ring: BazaarEvent[] = [];
+  const keep = opts.keep ?? 500;
+
+  if (opts.file) {
+    try {
+      fs.mkdirSync(path.dirname(opts.file), { recursive: true });
+    } catch {
+      /* ignore */
+    }
   }
+
   return {
-    path: filePath,
+    file: opts.file,
     emit(ev) {
-      try {
-        fs.appendFileSync(filePath, `${JSON.stringify({ ts: Date.now(), ...ev })}\n`);
-      } catch {
-        /* telemetry must never break the agent */
+      const full: BazaarEvent = { ts: Date.now(), ...ev };
+      ring.push(full);
+      if (ring.length > keep) ring.shift();
+      if (opts.file) {
+        try {
+          fs.appendFileSync(opts.file, `${JSON.stringify(full)}\n`);
+        } catch {
+          /* telemetry must never break the agent */
+        }
+      }
+      for (const fn of subscribers) {
+        try {
+          fn(full);
+        } catch {
+          /* a bad subscriber must not break emit */
+        }
       }
     },
+    subscribe(fn) {
+      subscribers.add(fn);
+      return () => subscribers.delete(fn);
+    },
+    recent(limit) {
+      return limit && limit > 0 ? ring.slice(-limit) : [...ring];
+    },
   };
+}
+
+/** Backwards-compatible file-backed bus used by the standalone CLI agents. */
+export function createEventLog(filePath: string): EventBus {
+  return createEventBus({ file: filePath });
 }

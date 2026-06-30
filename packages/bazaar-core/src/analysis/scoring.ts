@@ -1,4 +1,4 @@
-import type { RiskBand, RiskSignal } from '@bazaar/core';
+import type { RiskBand, RiskSignal } from '../types.js';
 import type { RepoMeta } from './github.js';
 
 export interface ScoreResult {

@@ -1,4 +1,5 @@
-import { createSummarizer, type RepoRiskReport, type RiskSignal } from '@bazaar/core';
+import { createSummarizer } from '../llm.js';
+import type { RepoRiskReport, RiskSignal } from '../types.js';
 import { parseRepoUrl } from './repo-url.js';
 import { fetchRepoMeta } from './github.js';
 import { scoreRepo, bandFor } from './scoring.js';

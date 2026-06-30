@@ -17,8 +17,7 @@ import {
   onBazaarMessage,
   type ServiceListing,
 } from '@bazaar/core';
-import { analyzeRepo } from './analysis/analyzer.js';
-import { parseRepoUrl } from './analysis/repo-url.js';
+import { analyzeRepo, parseRepoUrl } from '@bazaar/core';
 
 const PRICE_UCT = '2';
 const SERVICE = 'repo-risk-analysis' as const;

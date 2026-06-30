@@ -7,7 +7,6 @@
   "scripts": {
     "start": "tsx src/index.ts",
     "analyze": "tsx src/scripts/analyze.ts",
-    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

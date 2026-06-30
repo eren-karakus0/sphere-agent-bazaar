@@ -5,8 +5,7 @@
  *   pnpm --filter @bazaar/analyst-agent analyze <owner/repo | github url>
  */
 import 'dotenv/config';
-import { loadEnv } from '@bazaar/core';
-import { analyzeRepo } from '../analysis/analyzer.js';
+import { loadEnv, analyzeRepo } from '@bazaar/core';
 
 async function main(): Promise<void> {
   const target = process.argv[2] ?? 'unicitynetwork/state-transition-sdk-js';
