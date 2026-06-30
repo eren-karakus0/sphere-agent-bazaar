@@ -10,6 +10,8 @@ import {
   loadEnv,
   SphereAgent,
   createLogger,
+  createEventLog,
+  eventLogPath,
   searchServices,
   sendBazaarMessage,
   onBazaarMessage,
@@ -30,6 +32,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 async function main(): Promise<void> {
   const env = loadEnv();
   const log = createLogger('alphascout');
+  const events = createEventLog(eventLogPath(env.dataRoot));
 
   const agent = new SphereAgent({
     name: 'alphascout',
@@ -43,6 +46,7 @@ async function main(): Promise<void> {
     logger: log,
   });
   await agent.start();
+  events.emit({ type: 'agent:online', actor: agent.nametag, role: 'client', detail: 'AlphaScout treasury' });
 
   // Fund the treasury for the demo if needed.
   let balance = Number(await agent.balanceUct());
@@ -63,8 +67,10 @@ async function main(): Promise<void> {
     const match = found.find((f) => f.agentNametag?.replace(/^@/, '') === provider);
     if (match?.agentNametag) {
       log.info(`discovered provider on market: @${provider} (score ${match.score?.toFixed?.(2) ?? '?'})`);
+      events.emit({ type: 'service:discovered', actor: agent.nametag, role: 'client', counterparty: provider, detail: `market score ${match.score?.toFixed?.(2) ?? '?'}` });
     } else {
       log.info(`market lists ${found.length} repo-risk offer(s); using configured @${provider}`);
+      events.emit({ type: 'service:discovered', actor: agent.nametag, role: 'client', counterparty: provider, detail: 'configured' });
     }
   } catch {
     log.warn(`market search failed — using configured @${provider}`);
@@ -72,7 +78,7 @@ async function main(): Promise<void> {
 
   // State.
   let spent = 0;
-  const myJobs = new Set<string>(); // jobs we initiated this session
+  const myJobs = new Map<string, string>(); // jobId -> repoUrl (jobs we initiated this session)
   const quotes = new Map<string, { jobId: string; price: number }>(); // authorized, by paymentRequestId
   const bills = new Map<string, string>(); // present-in-wallet, requestId -> amount (smallest units)
   const paid = new Set<string>();
@@ -84,7 +90,7 @@ async function main(): Promise<void> {
   const tryPay = async (reqId: string): Promise<void> => {
     const quote = quotes.get(reqId);
     const amount = bills.get(reqId);
-    if (!quote || amount === undefined) return; // not authorized yet, or bill not arrived yet
+    if (!quote || amount === undefined) return;
     if (paid.has(reqId) || inflight.has(reqId)) return;
 
     const price = Number(agent.toHuman(amount));
@@ -103,6 +109,7 @@ async function main(): Promise<void> {
       paid.add(reqId);
       spent += price;
       log.info(`paid ${price} UCT for job ${quote.jobId} — spent ${spent}/${BUDGET_UCT} UCT`);
+      events.emit({ type: 'payment:sent', actor: agent.nametag, role: 'client', jobId: quote.jobId, repo: myJobs.get(quote.jobId), counterparty: provider, amountUct: String(price) });
     } catch (e) {
       log.warn(`pay attempt for ${reqId} not ready yet: ${e instanceof Error ? e.message : e}`);
     } finally {
@@ -113,7 +120,7 @@ async function main(): Promise<void> {
   // Quotes + results.
   onBazaarMessage(agent, (msg) => {
     if (msg.kind === 'job-quote') {
-      if (!myJobs.has(msg.jobId)) return; // ignore quotes for jobs we didn't initiate
+      if (!myJobs.has(msg.jobId)) return;
       if (msg.paymentRequestId) {
         quotes.set(msg.paymentRequestId, { jobId: msg.jobId, price: Number(msg.priceUct) });
         void tryPay(msg.paymentRequestId);
@@ -123,6 +130,7 @@ async function main(): Promise<void> {
       results.set(msg.jobId, msg.report);
       const r = msg.report;
       log.info(`report  ${r.repo}: ${r.riskScore}/100 ${r.riskBand} - ${r.summary.split('\n')[0]}`);
+      events.emit({ type: 'job:delivered', actor: agent.nametag, role: 'client', jobId: msg.jobId, repo: r.repo, counterparty: provider, riskScore: r.riskScore, riskBand: r.riskBand, detail: r.summary.split('\n')[0] });
     } else if (msg.kind === 'job-reject') {
       log.warn(`job ${msg.jobId} rejected: ${msg.reason}`);
     }
@@ -140,7 +148,7 @@ async function main(): Promise<void> {
   let n = 0;
   for (const repoUrl of WATCHLIST) {
     const jobId = `job-${Date.now()}-${n++}`;
-    myJobs.add(jobId);
+    myJobs.set(jobId, repoUrl);
     await sendBazaarMessage(agent, provider, {
       kind: 'job-request',
       service: 'repo-risk-analysis',
@@ -149,6 +157,7 @@ async function main(): Promise<void> {
       replyTo: agent.nametag,
     });
     log.info(`hired @${provider} -> analyze ${repoUrl} (job ${jobId})`);
+    events.emit({ type: 'job:requested', actor: agent.nametag, role: 'client', jobId, repo: repoUrl, counterparty: provider });
     await sleep(500);
   }
 

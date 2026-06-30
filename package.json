@@ -16,7 +16,10 @@
     "check": "pnpm lint && pnpm typecheck && pnpm test",
     "smoke": "pnpm --filter @bazaar/core smoke",
     "analyst": "pnpm --filter @bazaar/analyst-agent start",
-    "alphascout": "pnpm --filter @bazaar/alphascout-agent start"
+    "alphascout": "pnpm --filter @bazaar/alphascout-agent start",
+    "dashboard:build": "pnpm --filter @bazaar/dashboard build",
+    "dashboard": "pnpm --filter @bazaar/dashboard run server",
+    "dashboard:dev": "pnpm --filter @bazaar/dashboard run dev"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

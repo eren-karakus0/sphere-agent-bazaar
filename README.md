@@ -105,9 +105,23 @@ Expected tail:
 ### Run the agents
 
 ```bash
-pnpm analyst       # start the provider (Repo Risk Analyst)
-pnpm alphascout    # start the client (AlphaScout)
+pnpm analyst       # start the provider (Repo Risk Analyst), runs as a service
+pnpm alphascout    # start the client (AlphaScout), discovers + hires + pays
 ```
+
+### Watch it live (control-room dashboard)
+
+A dark, Unicity-branded dashboard streams the economy in real time — agent flow
+with value pulses, a job board with the risk-score pipeline, and a live event feed.
+
+```bash
+pnpm dashboard:build   # build the static UI (once)
+pnpm dashboard         # serve it + the live SSE feed on http://localhost:4317
+# then, in another terminal, run the agents — the dashboard updates live
+```
+
+For UI development with hot reload: `pnpm dashboard` (server, :4317) +
+`pnpm dashboard:dev` (Vite, :5173), then open :5173.
 
 ## Configuration
 
@@ -129,7 +143,11 @@ All config lives in `.env` (see `.env.example`). Notable values:
       **Verified live on testnet2:** AlphaScout discovers `@analyst-knkchn` on the
       market, hires it for two repos, pays the bills itself, and receives the
       reports — money moving between two agents with no human in the loop.
-- [ ] **M3 — polish:** live dashboard, deploy, `sphere-apps` listing, more risk signals (OSV.dev CVEs).
+- [x] **M3 — control room:** a live, Unicity-branded dashboard (`packages/dashboard`)
+      that streams the economy over SSE — agent flow with value pulses, a job board
+      with the risk pipeline, and a live event feed. Agents emit structured events
+      to a shared log; the dashboard server tails and broadcasts them.
+- [ ] **M3.1 — ship:** deploy the dashboard publicly, list on `sphere-apps`, add OSV.dev CVE signals.
 - [ ] **M4 — stretch:** escrow-swap settlement, AstridOS runtime, Gemini summaries.
 
 ## License

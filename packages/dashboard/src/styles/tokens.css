@@ -1,0 +1,88 @@
+/* Brand fonts — Anton (headlines), Geist (body), Geist Mono (data) */
+@import url('https://fonts.googleapis.com/css2?family=Anton&family=Geist:wght@300..900&family=Geist+Mono:wght@300..700&display=swap');
+
+:root {
+  color-scheme: dark;
+
+  /* Unicity brand palette (from sphere-ui/tokens.css) */
+  --brand-black: #020202;
+  --brand-white: #fefefe;
+  --brand-orange: #ff6f00;
+  --brand-orange-dark: #932d00;
+
+  --bg-root: #060606;
+  --bg-surface: #0d0d0d;
+  --bg-elevated: #111111;
+  --bg-hover: #1a1a1a;
+
+  --border: rgba(255, 255, 255, 0.07);
+  --border-subtle: rgba(255, 255, 255, 0.04);
+  --border-focus: rgba(255, 111, 0, 0.25);
+
+  --accent: var(--brand-orange);
+  --accent-dim: var(--brand-orange-dark);
+  --accent-glow: rgba(255, 111, 0, 0.08);
+
+  --text-primary: var(--brand-white);
+  --text-secondary: #ffe2cc;
+  --text-muted: rgba(255, 255, 255, 0.3);
+  --text-faint: rgba(255, 255, 255, 0.16);
+
+  /* risk bands */
+  --risk-low: #3ddc97;
+  --risk-medium: #f5b53f;
+  --risk-high: #ff6f00;
+  --risk-critical: #ff3b30;
+
+  --font-display: 'Anton', sans-serif;
+  --font-body: 'Geist', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono', 'SF Mono', 'Fira Code', monospace;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 24px var(--accent-glow), 0 0 48px rgba(255, 111, 0, 0.05);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-body);
+  background: var(--bg-root);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #1a1a1a;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+::selection {
+  background: rgba(255, 111, 0, 0.3);
+  color: #fff;
+}
