@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import { config as loadDotenv } from 'dotenv';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -38,6 +38,9 @@ export function findRepoRoot(start: string): string {
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = findRepoRoot(moduleDir);
+
+// Load .env from the repo root regardless of which package's cwd we run from.
+loadDotenv({ path: path.join(repoRoot, '.env') });
 
 export function loadEnv(): BazaarEnv {
   const clean = (v: string | undefined): string | undefined => {

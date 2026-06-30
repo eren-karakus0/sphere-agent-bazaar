@@ -6,6 +6,8 @@
   "description": "Repo Risk Analyst — a provider agent that sells GitHub repository risk analysis on the Unicity network.",
   "scripts": {
     "start": "tsx src/index.ts",
+    "analyze": "tsx src/scripts/analyze.ts",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -15,6 +17,7 @@
   "devDependencies": {
     "@types/node": "^22.10.0",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
   }
 }

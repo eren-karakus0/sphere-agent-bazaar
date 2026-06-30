@@ -12,7 +12,7 @@
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "test": "pnpm --filter @bazaar/core test",
+    "test": "pnpm -r --if-present run test",
     "check": "pnpm lint && pnpm typecheck && pnpm test",
     "smoke": "pnpm --filter @bazaar/core smoke",
     "analyst": "pnpm --filter @bazaar/analyst-agent start",
