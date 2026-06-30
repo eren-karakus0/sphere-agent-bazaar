@@ -123,6 +123,52 @@
   animation: none;
 }
 
+/* connect wallet */
+.wallet {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+.wallet__btn {
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  background: rgba(255, 111, 0, 0.1);
+  color: var(--accent);
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.wallet__btn:hover:not(:disabled) { background: var(--accent); color: #0a0a0a; }
+.wallet__btn:disabled { opacity: 0.6; cursor: progress; }
+.wallet--on {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px 7px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--border-focus);
+  background: var(--bg-elevated);
+}
+.wallet__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--risk-low);
+  box-shadow: 0 0 8px var(--risk-low);
+}
+.wallet__name { color: var(--text-primary); }
+.wallet__x {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.wallet__x:hover { color: var(--accent); }
+
 /* ---------------- Hero + explainer ---------------- */
 .hero {
   padding: 30px 0 4px;

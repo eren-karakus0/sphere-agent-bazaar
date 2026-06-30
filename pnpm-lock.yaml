@@ -99,6 +99,9 @@ importers:
       '@bazaar/core':
         specifier: workspace:*
         version: link:../bazaar-core
+      '@unicitylabs/sphere-sdk':
+        specifier: ^0.10.7
+        version: 0.10.7(ws@8.21.0)
       react:
         specifier: ^18.3.1
         version: 18.3.1

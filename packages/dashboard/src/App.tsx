@@ -10,6 +10,7 @@ import {
   type Job,
 } from './lib/derive';
 import { TryIt } from './TryIt';
+import { ConnectWallet } from './ConnectWallet';
 import type { BazaarEvent } from './types';
 
 const initials = (name: string) => name.replace(/^@/, '').slice(0, 2).toUpperCase();
@@ -148,6 +149,7 @@ function Header({ mode }: { mode: FeedMode }) {
           <span className="live__dot" />
           {label}
         </span>
+        <ConnectWallet />
       </div>
     </header>
   );
