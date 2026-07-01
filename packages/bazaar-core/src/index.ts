@@ -9,5 +9,6 @@ export * from './analyst-service.js';
 export * from './scout-client.js';
 export * from './llm.js';
 export * from './analysis/index.js';
+export * from './arcade/index.js';
 
 export const BAZAAR_CORE_VERSION = '0.1.0';

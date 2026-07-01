@@ -8,6 +8,7 @@ import {
   type AgentNode,
 } from './lib/derive';
 import { TryIt } from './TryIt';
+import { Arcade } from './Arcade';
 import { ConnectWallet } from './ConnectWallet';
 import { useWalletCtx } from './WalletContext';
 import { loadAnalyses, saveAnalyses, userKey, type AnalysisRecord } from './lib/analyses';
@@ -20,6 +21,7 @@ const fmtTime = (ts: number) =>
 export function App() {
   const wallet = useWalletCtx();
   const { events, mode } = useEventStream();
+  const [view, setView] = useState<'bazaar' | 'arcade'>('bazaar');
 
   const jobs = useMemo(() => deriveJobs(events), [events]);
   const agents = useMemo(() => deriveAgents(events), [events]);
@@ -49,29 +51,35 @@ export function App() {
 
   return (
     <div className="app">
-      <Header mode={mode} />
-      <Hero />
-      <HowItWorks />
-      <div className="split">
-        <TryIt onAnalyzed={addAnalysis} />
-        <FlowPanel
-          client={client}
-          provider={provider}
-          events={events}
-          stats={stats}
-          mode={mode}
-        />
-      </div>
-      <div className="section-label">Your history &amp; live activity</div>
-      <div className="grid">
-        <YourAnalyses
-          analyses={analyses}
-          connected={connected}
-          status={wallet.status}
-          onConnect={() => void wallet.connect()}
-        />
-        <Ticker events={events} />
-      </div>
+      <Header mode={mode} view={view} onView={setView} />
+      {view === 'arcade' ? (
+        <Arcade />
+      ) : (
+        <>
+          <Hero />
+          <HowItWorks />
+          <div className="split">
+            <TryIt onAnalyzed={addAnalysis} />
+            <FlowPanel
+              client={client}
+              provider={provider}
+              events={events}
+              stats={stats}
+              mode={mode}
+            />
+          </div>
+          <div className="section-label">Your history &amp; live activity</div>
+          <div className="grid">
+            <YourAnalyses
+              analyses={analyses}
+              connected={connected}
+              status={wallet.status}
+              onConnect={() => void wallet.connect()}
+            />
+            <Ticker events={events} />
+          </div>
+        </>
+      )}
       <Footer count={events.length} />
     </div>
   );
@@ -136,7 +144,15 @@ function RiskLegend() {
 }
 
 /* ---------------- Header ---------------- */
-function Header({ mode }: { mode: FeedMode }) {
+function Header({
+  mode,
+  view,
+  onView,
+}: {
+  mode: FeedMode;
+  view: 'bazaar' | 'arcade';
+  onView: (v: 'bazaar' | 'arcade') => void;
+}) {
   const [clock, setClock] = useState(() => new Date().toISOString().slice(11, 19));
   useEffect(() => {
     const t = setInterval(() => setClock(new Date().toISOString().slice(11, 19)), 1000);
@@ -153,6 +169,14 @@ function Header({ mode }: { mode: FeedMode }) {
         </div>
         <div className="hdr__sub">Control Room · Unicity testnet2</div>
       </div>
+      <nav className="tabs" aria-label="Sections">
+        <button className={`tab${view === 'bazaar' ? ' tab--on' : ''}`} onClick={() => onView('bazaar')}>
+          Bazaar
+        </button>
+        <button className={`tab${view === 'arcade' ? ' tab--on' : ''}`} onClick={() => onView('arcade')}>
+          Arcade
+        </button>
+      </nav>
       <div className="hdr__right">
         <span className="hdr__clock">{clock} UTC</span>
         <span className={`live${cls}`}>

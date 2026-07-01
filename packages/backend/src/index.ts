@@ -17,6 +17,7 @@ import {
   SphereAgent,
   AnalystService,
   ScoutClient,
+  GameDealer,
   createLogger,
 } from '@bazaar/core';
 
@@ -49,6 +50,7 @@ const scoutAgent = new SphereAgent({
 });
 
 let scout: ScoutClient | null = null;
+let dealer: GameDealer | null = null;
 let ready = false;
 
 async function boot(): Promise<void> {
@@ -61,8 +63,28 @@ async function boot(): Promise<void> {
   scout = new ScoutClient({ agent: scoutAgent, events, provider: env.analyst.nametag });
   await scout.start();
 
+  // The arcade house reuses the scout wallet (already funded / self-minting) to
+  // pay game winners on-chain — no extra agent or identity to provision.
+  dealer = new GameDealer({ agent: scoutAgent, cooldownMs: 800, logger: createLogger('dealer') });
+  await dealer.start();
+
   ready = true;
   log.info(`economy online — analyst @${analystAgent.nametag}, scout @${scoutAgent.nametag}`);
+}
+
+function readJson(req: http.IncomingMessage): Promise<Record<string, unknown>> {
+  return new Promise((resolve) => {
+    let body = '';
+    req.on('data', (c) => (body += c));
+    req.on('end', () => {
+      try {
+        resolve((JSON.parse(body || '{}') as Record<string, unknown>) ?? {});
+      } catch {
+        resolve({});
+      }
+    });
+    req.on('error', () => resolve({}));
+  });
 }
 
 function setCors(res: http.ServerResponse): void {
@@ -129,6 +151,53 @@ const server = http.createServer((req, res) => {
           json(res, 400, { error: e instanceof Error ? e.message : 'job failed' });
         }
       })();
+    });
+    return;
+  }
+
+  // ---- Agent Arcade: provably-fair rock-paper-scissors vs the house ----
+  if (pathname === '/api/arcade/leaderboard') {
+    if (!dealer) {
+      json(res, 200, { ready: false, house: null, rewardUct: 0, rows: [] });
+      return;
+    }
+    json(res, 200, { ready: true, house: dealer.house, rewardUct: dealer.rewardUct, rows: dealer.leaderboard() });
+    return;
+  }
+
+  if (pathname === '/api/arcade/new' && req.method === 'POST') {
+    if (!dealer) {
+      json(res, 503, { error: 'The arcade dealer is still waking up — try again in a few seconds.' });
+      return;
+    }
+    void readJson(req).then((body) => {
+      try {
+        const address = typeof body.address === 'string' ? body.address : undefined;
+        json(res, 200, dealer!.newRound(address));
+      } catch (e) {
+        json(res, 429, { error: e instanceof Error ? e.message : 'could not start a round' });
+      }
+    });
+    return;
+  }
+
+  if (pathname === '/api/arcade/play' && req.method === 'POST') {
+    if (!dealer) {
+      json(res, 503, { error: 'The arcade dealer is still waking up — try again in a few seconds.' });
+      return;
+    }
+    void readJson(req).then(async (body) => {
+      try {
+        const result = await dealer!.play({
+          roundId: String(body.roundId ?? ''),
+          playerMove: body.move,
+          playerAddress: typeof body.address === 'string' ? body.address : undefined,
+          name: typeof body.name === 'string' ? body.name : undefined,
+        });
+        json(res, 200, result);
+      } catch (e) {
+        json(res, 400, { error: e instanceof Error ? e.message : 'play failed' });
+      }
     });
     return;
   }
