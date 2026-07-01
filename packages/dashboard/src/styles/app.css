@@ -581,8 +581,11 @@
 }
 .wire__energy {
   position: absolute;
-  inset: 0;
-  border-radius: 2px;
+  top: -1.5px;
+  bottom: -1.5px;
+  left: 0;
+  right: 0;
+  border-radius: 3px;
   background: repeating-linear-gradient(90deg, var(--accent) 0 6px, transparent 6px 14px);
   background-size: 14px 100%;
   opacity: 0;
@@ -590,7 +593,7 @@
   animation: flow-dash 0.55s linear infinite;
 }
 .wire--live .wire__energy {
-  opacity: 0.55;
+  opacity: 0.7;
 }
 .wire__label {
   position: absolute;

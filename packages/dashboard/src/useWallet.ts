@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ConnectClient,
   SPHERE_NETWORKS,
@@ -10,6 +10,10 @@ import type { ConnectTransport, PublicIdentity } from '@unicitylabs/sphere-sdk/c
 
 const WALLET_URL = 'https://sphere.unicity.network';
 const SESSION_KEY = 'sphere-connect-session';
+// The dashboard uses the wallet purely as a login/identity (it never signs or
+// pays from the browser), so we persist the public identity to keep the user
+// logged in across page refreshes without re-opening the wallet popup.
+const IDENTITY_KEY = 'sphere-connect-identity';
 
 const DAPP = {
   name: 'Sphere Agent Bazaar',
@@ -68,6 +72,19 @@ export function useWallet(): WalletState {
   const transportRef = useRef<ConnectTransport | null>(null);
   const popupRef = useRef<Window | null>(null);
 
+  // Restore a previous login on refresh so the user stays connected.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(IDENTITY_KEY);
+      if (raw) {
+        setIdentity(JSON.parse(raw) as PublicIdentity);
+        setStatus('connected');
+      }
+    } catch {
+      /* corrupt / unavailable storage — ignore */
+    }
+  }, []);
+
   const connect = useCallback(async () => {
     setStatus('connecting');
     setError(null);
@@ -104,6 +121,11 @@ export function useWallet(): WalletState {
 
       const result = await client.connect();
       sessionStorage.setItem(SESSION_KEY, result.sessionId);
+      try {
+        localStorage.setItem(IDENTITY_KEY, JSON.stringify(result.identity));
+      } catch {
+        /* storage unavailable — non-fatal, connection still works this session */
+      }
       setIdentity(result.identity);
       setStatus('connected');
     } catch (e) {
@@ -129,6 +151,7 @@ export function useWallet(): WalletState {
       /* ignore */
     }
     sessionStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(IDENTITY_KEY);
     clientRef.current = null;
     transportRef.current = null;
     popupRef.current = null;

@@ -261,18 +261,27 @@ function FlowPanel({
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
   const lastLen = useRef(0);
   const seeded = useRef(false);
+  const seedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const repoRef = useRef<string | undefined>(undefined);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const fresh = events.slice(lastLen.current);
-    lastLen.current = events.length;
-
-    // Adopt the initial backlog silently — don't replay every past pulse on load.
+    // Absorb the backlog silently: on load the stream replays past events in a
+    // burst, then goes quiet. Keep adopting whatever has arrived until the burst
+    // settles (1s idle) — so history doesn't replay, but a job started afterwards
+    // animates cleanly.
     if (!seeded.current) {
-      seeded.current = true;
+      lastLen.current = events.length;
+      if (events.length === 0) return;
+      if (seedTimer.current) clearTimeout(seedTimer.current);
+      seedTimer.current = setTimeout(() => {
+        seeded.current = true;
+      }, 1000);
       return;
     }
+
+    const fresh = events.slice(lastLen.current);
+    lastLen.current = events.length;
 
     let nextPhase: Phase | null = null;
     for (const e of fresh) {
@@ -323,6 +332,7 @@ function FlowPanel({
   useEffect(
     () => () => {
       if (idleTimer.current) clearTimeout(idleTimer.current);
+      if (seedTimer.current) clearTimeout(seedTimer.current);
     },
     [],
   );
