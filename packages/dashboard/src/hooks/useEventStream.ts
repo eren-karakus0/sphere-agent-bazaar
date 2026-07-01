@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import type { BazaarEvent } from '../types';
+import { BACKEND_URL, hasBackend } from '../lib/backend';
 
 export type FeedMode = 'connecting' | 'live' | 'replay';
 
 /**
- * Feeds the dashboard. Prefers the live SSE stream from the dashboard server;
- * if no live feed appears shortly (e.g. on a static deploy with no server), it
- * falls back to a recorded snapshot so the public URL still shows a real run.
+ * Feeds the dashboard. When a live backend is configured it streams the real
+ * economy over SSE; otherwise (or if the backend is unreachable) it replays a
+ * recorded snapshot so the public URL still shows a real run.
  */
 export function useEventStream(): { events: BazaarEvent[]; mode: FeedMode } {
   const [events, setEvents] = useState<BazaarEvent[]>([]);
@@ -23,35 +24,40 @@ export function useEventStream(): { events: BazaarEvent[]; mode: FeedMode } {
     };
 
     let es: EventSource | null = null;
-    try {
-      es = new EventSource('/api/stream');
-      es.onopen = () => {
-        live.current = true;
-        setMode('live');
-      };
-      es.onmessage = (ev) => {
-        try {
-          add(JSON.parse(ev.data) as BazaarEvent);
-        } catch {
-          /* ignore malformed line */
-        }
-      };
-    } catch {
-      /* EventSource unavailable */
+    if (hasBackend()) {
+      try {
+        es = new EventSource(`${BACKEND_URL}/api/stream`);
+        es.onopen = () => {
+          live.current = true;
+          setMode('live');
+        };
+        es.onmessage = (ev) => {
+          try {
+            add(JSON.parse(ev.data) as BazaarEvent);
+          } catch {
+            /* ignore malformed line */
+          }
+        };
+      } catch {
+        /* EventSource unavailable */
+      }
     }
 
-    // Static-deploy fallback: if no live feed connects, replay the snapshot.
-    const fallback = setTimeout(() => {
-      if (live.current) return;
-      fetch('/snapshot.json')
-        .then((r) => (r.ok ? r.json() : []))
-        .then((arr: BazaarEvent[]) => {
-          if (live.current || !Array.isArray(arr) || arr.length === 0) return;
-          arr.forEach(add);
-          setMode('replay');
-        })
-        .catch(() => {});
-    }, 1500);
+    // Fall back to the recorded snapshot if no live feed connects.
+    const fallback = setTimeout(
+      () => {
+        if (live.current) return;
+        fetch('/snapshot.json')
+          .then((r) => (r.ok ? r.json() : []))
+          .then((arr: BazaarEvent[]) => {
+            if (live.current || !Array.isArray(arr) || arr.length === 0) return;
+            arr.forEach(add);
+            setMode('replay');
+          })
+          .catch(() => {});
+      },
+      hasBackend() ? 3000 : 400,
+    );
 
     return () => {
       clearTimeout(fallback);

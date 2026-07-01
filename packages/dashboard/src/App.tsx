@@ -91,15 +91,16 @@ function ModeBanner({ mode }: { mode: FeedMode }) {
   if (mode === 'replay') {
     return (
       <div className="banner banner--replay">
-        <strong>▷ Replay</strong> — a recorded run on Unicity testnet2. Run the agents
-        locally (<code>pnpm analyst</code> + <code>pnpm alphascout</code>) to watch it live.
+        <strong>▷ Replay</strong> — a recorded run on Unicity testnet2. The live agents are
+        offline right now; when they're up, analyzing a repo above drives the economy live.
       </div>
     );
   }
   if (mode === 'live') {
     return (
       <div className="banner banner--live">
-        <strong>● Live</strong> — agents are transacting on Unicity testnet2 right now.
+        <strong>● Live</strong> — the agents are connected to Unicity testnet2. Analyze a repo
+        above to trigger a real on-chain job and watch it flow through here.
       </div>
     );
   }

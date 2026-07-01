@@ -1,50 +1,69 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { bandColor } from './lib/derive';
-
-interface Report {
-  repo: string;
-  riskScore: number;
-  riskBand: string;
-  signals: { name: string; detail: string; weight: number }[];
-  summary: string;
-}
+import { analyzeInstant, analyzeViaAgents, checkAgentsLive, type Report } from './lib/backend';
 
 const EXAMPLES = ['facebook/react', 'angular/angular.js', 'expressjs/express'];
 
 export function TryIt() {
   const [repo, setRepo] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [agentsLive, setAgentsLive] = useState<boolean | null>(null);
+  const [status, setStatus] = useState<'idle' | 'agents' | 'instant'>('idle');
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    let alive = true;
+    void checkAgentsLive().then((v) => {
+      if (alive) setAgentsLive(v);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const busy = status !== 'idle';
+
   const run = async (target?: string) => {
     const q = (target ?? repo).trim();
-    if (!q || loading) return;
+    if (!q || busy) return;
     if (target) setRepo(target);
-    setLoading(true);
     setError(null);
     setReport(null);
+
+    if (agentsLive) {
+      setStatus('agents');
+      try {
+        setReport(await analyzeViaAgents(q));
+        setStatus('idle');
+        return;
+      } catch (e) {
+        setError(`Live agents: ${e instanceof Error ? e.message : 'failed'} — showing an instant preview instead.`);
+      }
+    }
+
+    setStatus('instant');
     try {
-      const res = await fetch(`/api/analyze?repo=${encodeURIComponent(q)}`);
-      const data = (await res.json()) as Report & { error?: string };
-      if (!res.ok || data.error) throw new Error(data.error ?? 'Analysis failed');
-      setReport(data);
+      setReport(await analyzeInstant(q));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Analysis failed');
     } finally {
-      setLoading(false);
+      setStatus('idle');
     }
   };
+
+  const btnLabel = status === 'agents' ? 'Hiring agents…' : status === 'instant' ? 'Analyzing…' : 'Analyze';
 
   return (
     <section className="tryit">
       <div className="tryit__head">
-        <span className="tryit__kicker">Try the analyst</span>
+        <span className="tryit__kicker">Analyze a repo</span>
         <h2 className="tryit__title">Score any GitHub repo</h2>
         <p className="tryit__sub">
-          Run the analyst's exact logic yourself — maintenance signals plus a live
-          OSV.dev dependency-CVE scan. Free and instant.
+          {agentsLive
+            ? 'Your request is fulfilled by the real agent economy below — the agents discover each other, negotiate, and settle on-chain (≈20–40s). Watch it happen live.'
+            : "Runs the analyst's exact logic — maintenance signals plus a live OSV.dev dependency-CVE scan. Free and instant."}
         </p>
+        <AgentStatus live={agentsLive} />
       </div>
 
       <form
@@ -63,24 +82,44 @@ export function TryIt() {
           autoCorrect="off"
           onChange={(e) => setRepo(e.target.value)}
         />
-        <button className="tryit__btn" type="submit" disabled={loading}>
-          {loading ? 'Analyzing…' : 'Analyze'}
+        <button className="tryit__btn" type="submit" disabled={busy}>
+          {btnLabel}
         </button>
       </form>
 
       <div className="tryit__examples">
         <span className="tryit__try">try:</span>
         {EXAMPLES.map((ex) => (
-          <button key={ex} className="chip" onClick={() => void run(ex)} disabled={loading}>
+          <button key={ex} className="chip" onClick={() => void run(ex)} disabled={busy}>
             {ex}
           </button>
         ))}
       </div>
 
+      {status === 'agents' && (
+        <div className="tryit__working">
+          <span className="tryit__spin" /> Hiring the analyst, paying on-chain, analyzing…
+          <span className="tryit__hint">↓ watch the agents below</span>
+        </div>
+      )}
       {error && <div className="tryit__error">⚠ {error}</div>}
       {report && <ReportCard report={report} />}
     </section>
   );
+}
+
+function AgentStatus({ live }: { live: boolean | null }) {
+  if (live === null) {
+    return <div className="agentstat agentstat--wait">checking live agents…</div>;
+  }
+  if (live) {
+    return (
+      <div className="agentstat agentstat--on">
+        <span className="agentstat__dot" /> Live agents ready — analyses run through the real economy
+      </div>
+    );
+  }
+  return <div className="agentstat agentstat--off">Live agents offline — instant preview mode</div>;
 }
 
 function ReportCard({ report }: { report: Report }) {
@@ -93,6 +132,11 @@ function ReportCard({ report }: { report: Report }) {
       </div>
       <div className="report__body">
         <div className="report__repo">{report.repo}</div>
+        {report.source === 'agents' ? (
+          <div className="report__badge report__badge--agents">✓ delivered by the live agents · paid on-chain</div>
+        ) : (
+          <div className="report__badge">instant preview</div>
+        )}
         <ul className="report__signals">
           {report.signals.length === 0 ? (
             <li className="report__sig">
