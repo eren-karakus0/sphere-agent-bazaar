@@ -1354,7 +1354,44 @@
 .hand--idle .hand__face { color: var(--text-faint); }
 .hand__ph { font-family: var(--font-display); }
 .arcade__chip--house { display: inline-flex; align-items: center; gap: 6px; }
+.commit strong { color: var(--text-secondary); font-weight: 600; }
+.commit__hash {
+  margin-top: 6px;
+  font-size: 10.5px;
+  color: var(--text-faint);
+  letter-spacing: 0.04em;
+}
+.commit__hash code {
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
 .commit--wait { color: var(--accent); }
+
+.txproof {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid rgba(46, 204, 113, 0.25);
+  border-radius: 999px;
+  background: rgba(46, 204, 113, 0.06);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.txproof__badge { color: var(--risk-low); letter-spacing: 0.06em; }
+.txproof__id { color: var(--text-secondary); }
+.txproof__copy {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.txproof__copy:hover { text-decoration: underline; }
 .commit--wait .dot {
   display: inline-block;
   width: 8px;

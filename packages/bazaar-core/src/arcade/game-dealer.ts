@@ -42,6 +42,19 @@ export interface PlayResult {
   rewardUct: number;
   paid: boolean;
   payoutError?: string;
+  /** On-chain transfer id of the payout (Sphere aggregator transfer). */
+  txId?: string;
+  /** Aggregator commitment request-id hex — the on-chain settlement reference. */
+  txRef?: string;
+  /** 'landed' = delivered to the winner's mailbox; 'pending-delivery' = certified, awaiting delivery. */
+  delivery?: string;
+}
+
+/** The slice of the SDK's TransferResult we surface as on-chain proof. */
+interface TxLike {
+  id?: string;
+  deliveryState?: string;
+  tokenTransfers?: { requestIdHex?: string }[];
 }
 
 export interface LeaderRow {
@@ -133,9 +146,10 @@ export class GameDealer {
 
     let paid = false;
     let payoutError: string | undefined;
+    let tx: TxLike | undefined;
     if (outcome === 'win' && input.playerAddress) {
       try {
-        await this.payout(input.playerAddress);
+        tx = await this.payout(input.playerAddress);
         paid = true;
       } catch (e) {
         payoutError = e instanceof Error ? e.message : 'payout failed';
@@ -154,6 +168,9 @@ export class GameDealer {
       rewardUct: this.reward,
       paid,
       ...(payoutError ? { payoutError } : {}),
+      ...(tx?.id ? { txId: tx.id } : {}),
+      ...(tx?.tokenTransfers?.[0]?.requestIdHex ? { txRef: tx.tokenTransfers[0].requestIdHex } : {}),
+      ...(tx?.deliveryState ? { delivery: tx.deliveryState } : {}),
     };
   }
 
@@ -166,10 +183,10 @@ export class GameDealer {
   // ---- internals ----
 
   /** Serialize house sends so concurrent wins never race on coin selection. */
-  private payout(address: string): Promise<void> {
+  private payout(address: string): Promise<TxLike> {
     const run = this.payLock.then(async () => {
       await this.ensureTreasury();
-      await this.agent.send(address, this.reward, 'arcade-rps-win');
+      return (await this.agent.send(address, this.reward, 'arcade-rps-win')) as unknown as TxLike;
     });
     // Keep the chain alive regardless of this payout's outcome.
     this.payLock = run.then(

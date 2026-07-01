@@ -25,6 +25,9 @@ export interface PlayResult {
   rewardUct: number;
   paid: boolean;
   payoutError?: string;
+  txId?: string;
+  txRef?: string;
+  delivery?: string;
 }
 
 export interface LeaderRow {

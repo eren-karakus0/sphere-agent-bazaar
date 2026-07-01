@@ -233,15 +233,25 @@ export function Arcade() {
         </div>
       ) : !result ? (
         <>
-          <div className="commit" title={round?.commit}>
-            {round ? (
-              <>
-                🔒 dealer committed <code>{round.commit.slice(0, 20)}…</code> — pick your move
-              </>
-            ) : (
-              'dealing a fresh round…'
-            )}
-          </div>
+          {status === 'playing' ? (
+            <div className="commit commit--wait">
+              <span className="dot" /> revealing the dealer&apos;s move &amp; settling any payout on-chain…
+            </div>
+          ) : round ? (
+            <div className="commit">
+              🔒 <strong>fairness lock</strong> — the dealer&apos;s move is sealed now; pick yours, then verify it.
+              <div
+                className="commit__hash"
+                title="sha256(dealer's move + a secret nonce). This is NOT a transaction — it is the commitment that proves the dealer cannot change its move after seeing yours."
+              >
+                commitment <code>{round.commit.slice(0, 16)}…</code>
+              </div>
+            </div>
+          ) : (
+            <div className="commit commit--wait">
+              <span className="dot" /> dealing a fresh round…
+            </div>
+          )}
           <div className="moves">
             {MOVES.map((m) => (
               <button
@@ -272,6 +282,9 @@ export function Arcade() {
               <span className="pay">the house took this one</span>
             )}
           </div>
+          {outcome === 'win' && result.paid && result.txId && (
+            <TxProof id={result.txId} delivery={result.delivery} />
+          )}
           <div className="outcome__verify">
             {verified === null ? (
               <span className="verify verify--wait">verifying commitment…</span>
@@ -334,6 +347,36 @@ function ArcadeHero({ house, reward }: { house: string | null; reward: number })
           provably fair
         </span>
       </div>
+    </div>
+  );
+}
+
+function TxProof({ id, delivery }: { id: string; delivery?: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    navigator.clipboard
+      ?.writeText(id)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1200);
+      })
+      .catch(() => {});
+  };
+  const badge =
+    delivery === 'landed'
+      ? 'on-chain ✓ landed'
+      : delivery === 'pending-delivery'
+        ? 'on-chain ✓ delivering'
+        : 'on-chain ✓ settled';
+  return (
+    <div className="txproof" title="Sphere aggregator transfer id — your payout, settled on Unicity testnet2.">
+      <span className="txproof__badge">{badge}</span>
+      <code className="txproof__id">
+        transfer {id.slice(0, 10)}…{id.length > 18 ? id.slice(-6) : ''}
+      </code>
+      <button className="txproof__copy" onClick={copy}>
+        {copied ? 'copied ✓' : 'copy id'}
+      </button>
     </div>
   );
 }
