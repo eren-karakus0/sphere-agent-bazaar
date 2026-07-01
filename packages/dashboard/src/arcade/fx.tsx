@@ -4,7 +4,7 @@
  * plays once after a real on-chain payout result.
  */
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
-import { Coin, Die, NumberTile } from './art';
+import { Coin, Die, NumberTile, WheelFace } from './art';
 
 /** A die that cycles faces while the round resolves. */
 export function TumblingDie({ size = 64, accent = false }: { size?: number; accent?: boolean }) {
@@ -31,6 +31,48 @@ export function CyclingTile({ size = 64 }: { size?: number }) {
     <span className="anim-cycle">
       <NumberTile value={n} size={size} />
     </span>
+  );
+}
+
+/**
+ * The Lucky Wheel: idles slowly between rounds, spins fast while the round
+ * really resolves, then decelerates onto the landed segment from the reveal.
+ */
+export function WheelFx({
+  segments,
+  landIndex,
+  spinning,
+  size = 210,
+}: {
+  segments?: readonly number[];
+  landIndex?: number;
+  spinning: boolean;
+  size?: number;
+}) {
+  const count = segments?.length ?? 10;
+  const [deg, setDeg] = useState(0);
+  useEffect(() => {
+    if (landIndex === undefined) {
+      setDeg(0);
+      return;
+    }
+    const step = 360 / count;
+    // 4 full turns, then stop with the landed segment centred under the pointer
+    const target = 4 * 360 + (360 - (landIndex * step + step / 2));
+    const raf = requestAnimationFrame(() => requestAnimationFrame(() => setDeg(target)));
+    return () => cancelAnimationFrame(raf);
+  }, [landIndex, count]);
+  const mode = landIndex !== undefined ? 'land' : spinning ? 'spin' : 'idle';
+  return (
+    <div className="wheelbox">
+      <div
+        className={`wheel wheel--${mode}`}
+        style={mode === 'land' ? { transform: `rotate(${deg}deg)` } : undefined}
+      >
+        <WheelFace segments={segments} size={size} />
+      </div>
+      <div className="wheel__pointer" aria-hidden="true" />
+    </div>
   );
 }
 

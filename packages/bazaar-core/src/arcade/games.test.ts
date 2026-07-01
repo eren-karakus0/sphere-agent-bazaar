@@ -1,10 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { commitHash, deriveDicePair } from './rng.js';
-import { GAMES, coinGame, diceGame, highlowGame, numberGame, rpsGame } from './games/index.js';
+import { commitHash, deriveDicePair, deriveWheelIndex } from './rng.js';
+import {
+  GAMES,
+  WHEEL_SEGMENTS,
+  coinGame,
+  diceGame,
+  highlowGame,
+  numberGame,
+  rpsGame,
+  wheelGame,
+} from './games/index.js';
 
 describe('arcade game registry', () => {
-  it('registers all five games by id', () => {
-    expect(Object.keys(GAMES).sort()).toEqual(['coin', 'dice', 'highlow', 'number', 'rps']);
+  it('registers all six games by id', () => {
+    expect(Object.keys(GAMES).sort()).toEqual(['coin', 'dice', 'highlow', 'number', 'rps', 'wheel']);
   });
 });
 
@@ -60,6 +69,32 @@ describe('dice duel (two-seed provably fair)', () => {
   });
   it('rejects a missing client seed', () => {
     expect(() => diceGame.resolveInput('')).toThrow();
+  });
+});
+
+describe('lucky wheel (two-seed provably fair)', () => {
+  it('lands deterministically from the same seeds, inside the wheel', () => {
+    const a = deriveWheelIndex('serverAAA', 'clientBBB', WHEEL_SEGMENTS.length);
+    const b = deriveWheelIndex('serverAAA', 'clientBBB', WHEEL_SEGMENTS.length);
+    expect(a).toBe(b);
+    expect(a).toBeGreaterThanOrEqual(0);
+    expect(a).toBeLessThan(WHEEL_SEGMENTS.length);
+  });
+  it('pays the landed segment multiplier and publishes the layout', () => {
+    const { publicState } = wheelGame.deal();
+    expect(publicState?.segments).toEqual([...WHEEL_SEGMENTS]);
+    const index = deriveWheelIndex('deadbeef', 'player123', WHEEL_SEGMENTS.length);
+    const r = wheelGame.judge('deadbeef', 'player123');
+    expect(r.reveal.segmentIndex).toBe(index);
+    expect(r.rewardMult).toBe(WHEEL_SEGMENTS[index]);
+    expect(r.outcome).toBe(WHEEL_SEGMENTS[index]! > 0 ? 'win' : 'lose');
+  });
+  it('has losing segments and a ×5 jackpot', () => {
+    expect(WHEEL_SEGMENTS).toContain(0);
+    expect(Math.max(...WHEEL_SEGMENTS)).toBe(5);
+  });
+  it('rejects a missing client seed', () => {
+    expect(() => wheelGame.resolveInput('')).toThrow();
   });
 });
 

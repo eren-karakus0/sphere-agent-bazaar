@@ -757,6 +757,33 @@
   70% { transform: scale(0.95, 1.08) rotate(-1deg); }
 }
 
+/* lucky wheel — idles, spins while resolving, decelerates onto the reveal */
+.wheelbox {
+  position: relative;
+  display: inline-flex;
+  filter: drop-shadow(0 10px 26px rgba(0, 0, 0, 0.55));
+}
+.wheel { display: inline-flex; will-change: transform; }
+.wheel--idle { animation: wheel-turn 26s linear infinite; }
+.wheel--spin { animation: wheel-turn 0.55s linear infinite; }
+.wheel--land { transition: transform 2.8s cubic-bezier(0.12, 0.8, 0.2, 1); }
+@keyframes wheel-turn {
+  to { transform: rotate(360deg); }
+}
+.wheel__pointer {
+  position: absolute;
+  top: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 11px solid transparent;
+  border-right: 11px solid transparent;
+  border-top: 19px solid var(--accent);
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+  z-index: 2;
+}
+
 /* micro-interactions */
 .gcard:hover .gcard__art { animation: icon-wiggle 0.45s ease-in-out; }
 @keyframes icon-wiggle {
@@ -782,7 +809,12 @@
   .burst__coin,
   .events__flame--lit,
   .events__flame--hot,
-  .gcard:hover .gcard__art {
+  .gcard:hover .gcard__art,
+  .wheel--idle,
+  .wheel--spin {
     animation: none !important;
+  }
+  .wheel--land {
+    transition: none !important;
   }
 }

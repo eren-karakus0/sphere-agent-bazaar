@@ -43,3 +43,13 @@ export function deriveDicePair(server: string, client: string): { house: number;
   const player = (parseInt(h.slice(8, 16), 16) % 6) + 1;
   return { house, player };
 }
+
+/**
+ * Derive the wheel's landing segment from the committed server seed and the
+ * player's client seed — same two-seed scheme as the dice duel, and identical
+ * on the browser so the player can recompute the landing.
+ */
+export function deriveWheelIndex(server: string, client: string, segmentCount: number): number {
+  const h = createHash('sha256').update(`${server}:${client}`).digest('hex');
+  return parseInt(h.slice(0, 8), 16) % segmentCount;
+}

@@ -193,6 +193,56 @@ export function Flame({ size = 20, dim = false }: { size?: number; dim?: boolean
   );
 }
 
+/* ---- Lucky Wheel ---- */
+const DEFAULT_WHEEL: readonly number[] = [0, 1, 0, 2, 0, 1, 0, 2, 0, 5];
+
+function wheelPolar(r: number, deg: number): [number, number] {
+  const a = ((deg - 90) * Math.PI) / 180;
+  return [100 + r * Math.cos(a), 100 + r * Math.sin(a)];
+}
+
+const WHEEL_FILL: Record<number, string> = { 0: '#161616', 1: '#b34e00', 2: O, 5: '#FFD9A8' };
+
+export function WheelFace({ segments = DEFAULT_WHEEL, size = 64 }: { segments?: readonly number[]; size?: number }) {
+  const step = 360 / segments.length;
+  return (
+    <svg width={size} height={size} viewBox="0 0 200 200" fill="none" role="img" aria-label="lucky wheel">
+      <circle cx="100" cy="100" r="98" fill={INK} />
+      {segments.map((m, i) => {
+        const a0 = i * step;
+        const mid = a0 + step / 2;
+        const [x0, y0] = wheelPolar(93, a0);
+        const [x1, y1] = wheelPolar(93, a0 + step);
+        const [tx, ty] = wheelPolar(66, mid);
+        return (
+          <g key={i}>
+            <path
+              d={`M 100 100 L ${x0} ${y0} A 93 93 0 0 1 ${x1} ${y1} Z`}
+              fill={WHEEL_FILL[m] ?? O2}
+              stroke={INK}
+              strokeWidth="2.5"
+            />
+            <text
+              x={tx}
+              y={ty}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fontFamily="Anton, sans-serif"
+              fontSize="17"
+              fill={m === 5 ? INK : m === 0 ? 'rgba(255,255,255,0.35)' : FACE}
+              transform={`rotate(${mid} ${tx} ${ty})`}
+            >
+              ×{m}
+            </text>
+          </g>
+        );
+      })}
+      <circle cx="100" cy="100" r="96.5" fill="none" stroke={O} strokeWidth="3" />
+      <circle cx="100" cy="100" r="14" fill={O} stroke={INK} strokeWidth="4" />
+    </svg>
+  );
+}
+
 export function HandOf({ move, size = 64 }: { move?: string; size?: number }) {
   if (move === 'rock') return <HandRock size={size} />;
   if (move === 'paper') return <HandPaper size={size} />;

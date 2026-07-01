@@ -136,6 +136,16 @@ export async function verifyDice(
   return house === expected.dealerRoll && player === expected.playerRoll;
 }
 
+/** Recompute the wheel landing from the two seeds — mirrors the server's deriveWheelIndex. */
+export async function verifyWheel(
+  server: string,
+  client: string,
+  expected: { segmentIndex: number; segmentCount: number },
+): Promise<boolean> {
+  const h = await sha256Hex(`${server}:${client}`);
+  return parseInt(h.slice(0, 8), 16) % expected.segmentCount === expected.segmentIndex;
+}
+
 export function makeClientSeed(): string {
   const bytes = new Uint8Array(8);
   crypto.getRandomValues(bytes);

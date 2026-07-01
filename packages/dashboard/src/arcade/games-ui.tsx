@@ -11,11 +11,13 @@ import {
   HandRock,
   HandScissors,
   NumberTile,
+  WheelFace,
 } from './art';
-import { CyclingTile, TumblingDie } from './fx';
+import { CyclingTile, TumblingDie, WheelFx } from './fx';
 
 export const GAMES_META: GameMeta[] = [
   { id: 'rps', title: 'Rock · Paper · Scissors', blurb: 'Beat the house’s sealed move.', rewardMult: 1, inputKind: 'choice' },
+  { id: 'wheel', title: 'Lucky Wheel', blurb: 'Spin — land a multiplier. ×5 jackpot, two-seed fair.', rewardMult: 5, inputKind: 'seed' },
   { id: 'dice', title: 'Dice Duel', blurb: 'Higher roll wins — two-seed fair.', rewardMult: 1, inputKind: 'seed' },
   { id: 'coin', title: 'Coin Flip', blurb: 'Call it. Pure 50 / 50.', rewardMult: 1, inputKind: 'choice' },
   { id: 'highlow', title: 'High · Low', blurb: 'Higher or lower than the card?', rewardMult: 1, inputKind: 'choice' },
@@ -40,6 +42,10 @@ export interface GameUI {
   Stage: (p: StageProps) => JSX.Element;
   options?: (round: NewRound | null) => Option[];
   rollLabel?: string;
+  /** Hold the verdict this long after the result so the reveal can land. */
+  settleMs?: number;
+  /** Custom picker reward line (e.g. variable-multiplier games). */
+  reward?: (base: number) => string;
 }
 
 function Slot({ label, children }: { label: string; children: ReactNode }) {
@@ -120,6 +126,35 @@ export const GAME_UI: Record<string, GameUI> = {
       { key: 'paper', art: <HandOf move="paper" size={40} />, name: 'paper', choice: 'paper' },
       { key: 'scissors', art: <HandOf move="scissors" size={40} />, name: 'scissors', choice: 'scissors' },
     ],
+  },
+  wheel: {
+    Icon: ({ size }) => <WheelFace size={size} />,
+    Stage: ({ round, result, pending }) => {
+      const segments = (result?.reveal.segments ?? round?.publicState?.segments) as number[] | undefined;
+      return (
+        <Solo
+          caption={
+            pending
+              ? 'spinning…'
+              : result
+                ? `landed ×${str(result.reveal.multiplier)}`
+                : round
+                  ? 'give it a spin'
+                  : ''
+          }
+        >
+          <WheelFx
+            segments={segments}
+            landIndex={result ? num(result.reveal.segmentIndex) : undefined}
+            spinning={pending}
+            size={210}
+          />
+        </Solo>
+      );
+    },
+    rollLabel: 'Spin the wheel',
+    settleMs: 3100,
+    reward: (base) => `win up to ${base * 5} UCT`,
   },
   dice: {
     Icon: ({ size }) => <Die n={5} size={size} />,

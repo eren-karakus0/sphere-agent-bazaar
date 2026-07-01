@@ -8,6 +8,7 @@ import {
   playRound,
   verifyCommit,
   verifyDice,
+  verifyWheel,
   type GameMeta,
   type LeaderRow,
   type NewRound,
@@ -48,7 +49,12 @@ export function Arcade() {
   const [baseReward, setBaseReward] = useState(1);
   const [you, setYou] = useState<PlayerSnapshot | null>(null);
   const [dailyDef, setDailyDef] = useState<{ goal: number; reward: number } | null>(null);
+  // Holds the verdict while a reveal animation (e.g. the wheel) lands.
+  const [settling, setSettling] = useState(false);
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const dealing = useRef(false);
+
+  useEffect(() => () => clearTimeout(settleTimer.current), []);
 
   const meta = games.find((g) => g.id === selected) ?? GAMES_META.find((g) => g.id === selected)!;
   const ui = GAME_UI[selected]!;
@@ -127,6 +133,8 @@ export function Arcade() {
     setResult(null);
     setVerified(null);
     setError(null);
+    clearTimeout(settleTimer.current);
+    setSettling(false);
   };
 
   const play = async (choice: unknown) => {
@@ -145,12 +153,25 @@ export function Arcade() {
       setResult(res);
       if (res.daily) setYou({ streak: res.streak, best: res.best, daily: res.daily });
       setVerified(null);
+      const settleMs = GAME_UI[res.game]?.settleMs ?? 0;
+      if (settleMs > 0) {
+        setSettling(true);
+        clearTimeout(settleTimer.current);
+        settleTimer.current = setTimeout(() => setSettling(false), settleMs);
+      }
       void (async () => {
         let ok = await verifyCommit(res.secret, res.nonce, res.commit);
         if (ok && res.game === 'dice') {
           ok = await verifyDice(res.secret, String(res.reveal.clientSeed), {
             dealerRoll: Number(res.reveal.dealerRoll),
             playerRoll: Number(res.reveal.playerRoll),
+          });
+        }
+        if (ok && res.game === 'wheel') {
+          const segs = res.reveal.segments as unknown[] | undefined;
+          ok = await verifyWheel(res.secret, String(res.reveal.clientSeed), {
+            segmentIndex: Number(res.reveal.segmentIndex),
+            segmentCount: segs?.length ?? 10,
           });
         }
         setVerified(ok);
@@ -218,30 +239,33 @@ export function Arcade() {
                   <Icon size={40} />
                 </div>
                 <div className="gcard__title">{g.title}</div>
-                <div className="gcard__reward">win {baseReward * g.rewardMult} UCT</div>
+                <div className="gcard__reward">
+                  {GAME_UI[g.id]!.reward?.(baseReward) ?? `win ${baseReward * g.rewardMult} UCT`}
+                </div>
               </button>
             );
           })}
       </div>
 
       <div className="table">
-        {outcome === 'win' && <WinBurst key={result!.nonce} />}
+        {outcome === 'win' && !settling && <WinBurst key={result!.nonce} />}
         <div className="table__head">
           <span className="table__title">{meta.title}</span>
           <span className="table__blurb">{meta.blurb}</span>
         </div>
 
-        <ui.Stage round={round} result={result} pending={status === 'playing'} />
+        <ui.Stage round={round} result={result} pending={status === 'playing' || settling} />
 
         {ready !== true ? (
           <div className="commit commit--wait">
             <span className="dot" /> waking the dealer… free-tier cold start, up to ~1 min
           </div>
-        ) : !result ? (
+        ) : !result || settling ? (
           <>
-            {status === 'playing' ? (
+            {status === 'playing' || settling ? (
               <div className="commit commit--wait">
-                <span className="dot" /> revealing &amp; settling any payout on-chain…
+                <span className="dot" />{' '}
+                {settling ? 'watch it land…' : 'revealing & settling any payout on-chain…'}
               </div>
             ) : round ? (
               <div className="commit">
