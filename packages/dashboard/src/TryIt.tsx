@@ -1,10 +1,15 @@
 import { useEffect, useState } from 'react';
 import { bandColor } from './lib/derive';
 import { analyzeInstant, analyzeViaAgents, checkAgentsLive, type Report } from './lib/backend';
+import { useWalletCtx } from './WalletContext';
+import type { AnalysisRecord } from './lib/analyses';
 
 const EXAMPLES = ['facebook/react', 'angular/angular.js', 'expressjs/express'];
 
-export function TryIt() {
+export function TryIt({ onAnalyzed }: { onAnalyzed: (r: AnalysisRecord) => void }) {
+  const wallet = useWalletCtx();
+  const connected = wallet.status === 'connected' && !!wallet.identity;
+
   const [repo, setRepo] = useState('');
   const [agentsLive, setAgentsLive] = useState<boolean | null>(null);
   const [status, setStatus] = useState<'idle' | 'agents' | 'instant'>('idle');
@@ -26,32 +31,51 @@ export function TryIt() {
   const run = async (target?: string) => {
     const q = (target ?? repo).trim();
     if (!q || busy) return;
+    if (!connected) {
+      void wallet.connect(); // gate: must connect first
+      return;
+    }
     if (target) setRepo(target);
     setError(null);
     setReport(null);
 
+    let rep: Report | null = null;
     if (agentsLive) {
       setStatus('agents');
       try {
-        setReport(await analyzeViaAgents(q));
-        setStatus('idle');
-        return;
+        rep = await analyzeViaAgents(q);
       } catch (e) {
         setError(`Live agents: ${e instanceof Error ? e.message : 'failed'} — showing an instant preview instead.`);
       }
     }
-
-    setStatus('instant');
-    try {
-      setReport(await analyzeInstant(q));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Analysis failed');
-    } finally {
-      setStatus('idle');
+    if (!rep) {
+      setStatus('instant');
+      try {
+        rep = await analyzeInstant(q);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Analysis failed');
+      }
+    }
+    setStatus('idle');
+    if (rep) {
+      setReport(rep);
+      onAnalyzed({
+        repo: rep.repo,
+        riskScore: rep.riskScore,
+        riskBand: rep.riskBand,
+        ts: Date.now(),
+        source: rep.source,
+      });
     }
   };
 
-  const btnLabel = status === 'agents' ? 'Hiring agents…' : status === 'instant' ? 'Analyzing…' : 'Analyze';
+  const btnLabel = !connected
+    ? 'Connect wallet to analyze'
+    : status === 'agents'
+      ? 'Hiring agents…'
+      : status === 'instant'
+        ? 'Analyzing…'
+        : 'Analyze';
 
   return (
     <section className="tryit">
@@ -59,11 +83,13 @@ export function TryIt() {
         <span className="tryit__kicker">Analyze a repo</span>
         <h2 className="tryit__title">Score any GitHub repo</h2>
         <p className="tryit__sub">
-          {agentsLive
-            ? 'Your request is fulfilled by the real agent economy below — the agents discover each other, negotiate, and settle on-chain (≈20–40s). Watch it happen live.'
-            : "Runs the analyst's exact logic — maintenance signals plus a live OSV.dev dependency-CVE scan. Free and instant."}
+          {connected
+            ? agentsLive
+              ? 'Your request is fulfilled by the real agent economy — the agents discover each other, negotiate, and settle on-chain (≈20–40s). Watch it happen live.'
+              : "Runs the analyst's exact logic — maintenance signals plus a live OSV.dev dependency-CVE scan."
+            : 'Connect your Unicity wallet to run analyses. Your results are saved to your identity.'}
         </p>
-        <AgentStatus live={agentsLive} />
+        {connected ? <AgentStatus live={agentsLive} /> : <div className="agentstat agentstat--off">🔒 wallet required</div>}
       </div>
 
       <form
@@ -80,6 +106,7 @@ export function TryIt() {
           spellCheck={false}
           autoCapitalize="off"
           autoCorrect="off"
+          disabled={!connected}
           onChange={(e) => setRepo(e.target.value)}
         />
         <button className="tryit__btn" type="submit" disabled={busy}>
@@ -99,7 +126,7 @@ export function TryIt() {
       {status === 'agents' && (
         <div className="tryit__working">
           <span className="tryit__spin" /> Hiring the analyst, paying on-chain, analyzing…
-          <span className="tryit__hint">↓ watch the agents below</span>
+          <span className="tryit__hint">↓ watch the agents</span>
         </div>
       )}
       {error && <div className="tryit__error">⚠ {error}</div>}

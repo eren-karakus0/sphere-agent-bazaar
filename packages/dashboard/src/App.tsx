@@ -1,16 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useEventStream, type FeedMode } from './hooks/useEventStream';
 import {
   bandColor,
   deriveAgents,
   deriveJobs,
   deriveStats,
-  PIPELINE,
   type AgentNode,
-  type Job,
 } from './lib/derive';
 import { TryIt } from './TryIt';
 import { ConnectWallet } from './ConnectWallet';
+import { useWalletCtx } from './WalletContext';
+import { loadAnalyses, saveAnalyses, userKey, type AnalysisRecord } from './lib/analyses';
 import type { BazaarEvent } from './types';
 
 const initials = (name: string) => name.replace(/^@/, '').slice(0, 2).toUpperCase();
@@ -18,6 +18,7 @@ const fmtTime = (ts: number) =>
   new Date(ts).toISOString().slice(11, 19);
 
 export function App() {
+  const wallet = useWalletCtx();
   const { events, mode } = useEventStream();
 
   const jobs = useMemo(() => deriveJobs(events), [events]);
@@ -27,13 +28,32 @@ export function App() {
   const client = agents.find((a) => a.role === 'client');
   const provider = agents.find((a) => a.role === 'provider');
 
+  const connected = wallet.status === 'connected' && !!wallet.identity;
+  const storeKey = wallet.identity ? userKey(wallet.identity) : null;
+
+  const [analyses, setAnalyses] = useState<AnalysisRecord[]>([]);
+  useEffect(() => {
+    setAnalyses(storeKey ? loadAnalyses(storeKey) : []);
+  }, [storeKey]);
+
+  const addAnalysis = useCallback(
+    (rec: AnalysisRecord) => {
+      setAnalyses((cur) => {
+        const next = [rec, ...cur].slice(0, 50);
+        if (storeKey) saveAnalyses(storeKey, next);
+        return next;
+      });
+    },
+    [storeKey],
+  );
+
   return (
     <div className="app">
       <Header mode={mode} />
       <Hero />
       <HowItWorks />
       <div className="split">
-        <TryIt />
+        <TryIt onAnalyzed={addAnalysis} />
         <FlowPanel
           client={client}
           provider={provider}
@@ -42,9 +62,14 @@ export function App() {
           mode={mode}
         />
       </div>
-      <div className="section-label">Live jobs &amp; activity</div>
+      <div className="section-label">Your history &amp; live activity</div>
       <div className="grid">
-        <JobBoard jobs={jobs} />
+        <YourAnalyses
+          analyses={analyses}
+          connected={connected}
+          status={wallet.status}
+          onConnect={() => void wallet.connect()}
+        />
         <Ticker events={events} />
       </div>
       <Footer count={events.length} />
@@ -265,29 +290,47 @@ function AgentCard({
   );
 }
 
-/* ---------------- Job board ---------------- */
-function JobBoard({ jobs }: { jobs: Job[] }) {
+/* ---------------- Your analyses (per-wallet) ---------------- */
+function YourAnalyses({
+  analyses,
+  connected,
+  status,
+  onConnect,
+}: {
+  analyses: AnalysisRecord[];
+  connected: boolean;
+  status: FeedMode | string;
+  onConnect: () => void;
+}) {
   return (
     <section className="panel">
       <div className="panel__head">
-        <span className="panel__title">Analysis Jobs</span>
+        <span className="panel__title">Your analyses</span>
         <RiskLegend />
-        <span className="panel__count">{jobs.length} total</span>
+        <span className="panel__count">{connected ? `${analyses.length} saved` : 'locked'}</span>
       </div>
       <p className="panel__sub">
-        Each job advances: requested → quoted → paid → analyzing → delivered. The big number
-        is the repo's risk score (0–100); color shows the band.
+        Repos you&apos;ve scored with this wallet. Tied to your Unicity identity — each wallet
+        sees only its own history.
       </p>
-      {jobs.length === 0 ? (
-        <div className="empty">
-          No jobs yet. Start the agents:
-          <br />
-          <code>pnpm analyst</code> &nbsp;and&nbsp; <code>pnpm alphascout</code>
+      {!connected ? (
+        <div className="empty empty--locked">
+          <div className="empty__lock">🔒</div>
+          <div>Connect your wallet to run analyses and keep your history here.</div>
+          <button
+            className="empty__connect"
+            onClick={onConnect}
+            disabled={status === 'connecting'}
+          >
+            {status === 'connecting' ? 'Connecting…' : 'Connect Wallet'}
+          </button>
         </div>
+      ) : analyses.length === 0 ? (
+        <div className="empty">No analyses yet — score a repo on the left to get started.</div>
       ) : (
-        <div className="jobs">
-          {jobs.map((j) => (
-            <JobCard key={j.jobId} job={j} />
+        <div className="analyses">
+          {analyses.map((a) => (
+            <AnalysisRow key={`${a.repo}-${a.ts}`} rec={a} />
           ))}
         </div>
       )}
@@ -295,44 +338,30 @@ function JobBoard({ jobs }: { jobs: Job[] }) {
   );
 }
 
-function JobCard({ job }: { job: Job }) {
-  const rank = PIPELINE.indexOf(job.state);
-  const hasScore = job.riskScore !== undefined;
+function AnalysisRow({ rec }: { rec: AnalysisRecord }) {
+  const color = bandColor(rec.riskBand);
   return (
-    <article className={`job${job.state === 'delivered' ? ' job--delivered' : ''}`}>
-      <div>
-        <div className="job__repo">{job.repo ?? job.jobId}</div>
-        <div className="job__meta">
-          {job.client ?? '—'} → {job.provider ?? '—'}
-          {job.priceUct ? ` · ${job.priceUct} UCT` : ''}
+    <article className="arow">
+      <div className="arow__score" style={{ color }}>
+        <div className="arow__num">{rec.riskScore}</div>
+        <div className="arow__band">{rec.riskBand}</div>
+      </div>
+      <div className="arow__body">
+        <div className="arow__repo">{rec.repo}</div>
+        <div className="arow__meta">
+          {rec.source === 'agents' ? 'live agents · paid on-chain' : 'instant preview'} ·{' '}
+          {fmtTime(rec.ts)}
         </div>
       </div>
-      <div className={`job__score${hasScore ? '' : ' job__score--pending'}`}>
-        <div className="job__score-num" style={hasScore ? { color: bandColor(job.riskBand) } : undefined}>
-          {hasScore ? job.riskScore : '··'}
-        </div>
-        <div className="job__score-band" style={hasScore ? { color: bandColor(job.riskBand) } : undefined}>
-          {hasScore ? job.riskBand : 'risk'}
-        </div>
-      </div>
-      <div className="pipe">
-        {PIPELINE.map((step, i) => {
-          const cls =
-            job.state === 'rejected' && i > 1
-              ? 'pipe__step--rejected'
-              : i < rank
-                ? 'pipe__step--done'
-                : i === rank
-                  ? 'pipe__step--current'
-                  : '';
-          return (
-            <div className={`pipe__step ${cls}`} key={step}>
-              <span className="pipe__dot" />
-              {step}
-            </div>
-          );
-        })}
-      </div>
+      <a
+        className="arow__link"
+        href={`https://github.com/${rec.repo}`}
+        target="_blank"
+        rel="noreferrer"
+        title="Open on GitHub"
+      >
+        ↗
+      </a>
     </article>
   );
 }

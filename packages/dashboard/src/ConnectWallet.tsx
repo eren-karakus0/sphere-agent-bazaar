@@ -1,7 +1,7 @@
-import { useWallet } from './useWallet';
+import { useWalletCtx } from './WalletContext';
 
 export function ConnectWallet() {
-  const { status, identity, error, connect, disconnect } = useWallet();
+  const { status, identity, error, connect, disconnect } = useWalletCtx();
 
   if (status === 'connected' && identity) {
     const label = identity.nametag
