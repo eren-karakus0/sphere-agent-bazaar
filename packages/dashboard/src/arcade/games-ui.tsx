@@ -44,6 +44,8 @@ export interface GameUI {
   Stage: (p: StageProps) => JSX.Element;
   options?: (round: NewRound | null) => Option[];
   rollLabel?: string;
+  /** Keep the pending animation running this long before showing the reveal. */
+  suspenseMs?: number;
   /** Hold the verdict this long after the result so the reveal can land. */
   settleMs?: number;
   /** Custom picker reward line (e.g. variable-multiplier games). */
@@ -128,6 +130,7 @@ export const GAME_UI: Record<string, GameUI> = {
       { key: 'paper', art: <HandOf move="paper" size={40} />, name: 'paper', choice: 'paper' },
       { key: 'scissors', art: <HandOf move="scissors" size={40} />, name: 'scissors', choice: 'scissors' },
     ],
+    suspenseMs: 1100,
   },
   wheel: {
     Icon: ({ size }) => <WheelFace size={size} />,
@@ -155,6 +158,7 @@ export const GAME_UI: Record<string, GameUI> = {
       );
     },
     rollLabel: 'Spin the wheel',
+    suspenseMs: 900,
     settleMs: 3100,
     reward: () => 'pays up to ×5',
   },
@@ -185,6 +189,7 @@ export const GAME_UI: Record<string, GameUI> = {
       );
     },
     rollLabel: 'Drop the ball',
+    suspenseMs: 500,
     settleMs: 2500,
     reward: () => 'pays up to ×10',
   },
@@ -217,6 +222,7 @@ export const GAME_UI: Record<string, GameUI> = {
       />
     ),
     rollLabel: 'Roll the dice',
+    suspenseMs: 1300,
   },
   coin: {
     Icon: ({ size }) => <Coin side="heads" size={size} />,
@@ -249,6 +255,7 @@ export const GAME_UI: Record<string, GameUI> = {
       { key: 'heads', art: <Coin side="heads" size={38} />, name: 'heads', choice: 'heads' },
       { key: 'tails', art: <Coin side="tails" size={38} />, name: 'tails', choice: 'tails' },
     ],
+    suspenseMs: 1300,
   },
   highlow: {
     Icon: ({ size }) => <Card rank={13} size={size} />,
@@ -275,6 +282,7 @@ export const GAME_UI: Record<string, GameUI> = {
       { key: 'higher', art: <span className="gbtn__glyph">↑</span>, name: 'higher', choice: 'higher' },
       { key: 'lower', art: <span className="gbtn__glyph">↓</span>, name: 'lower', choice: 'lower' },
     ],
+    suspenseMs: 1000,
   },
   number: {
     Icon: ({ size }) => <NumberTile hidden size={size} />,
@@ -308,5 +316,6 @@ export const GAME_UI: Record<string, GameUI> = {
         name: '',
         choice: n,
       })),
+    suspenseMs: 1200,
   },
 };

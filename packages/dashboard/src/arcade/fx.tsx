@@ -5,6 +5,7 @@
  */
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { Coin, Die, NumberTile, WheelFace } from './art';
+import { sfx } from './sound';
 
 /** A die that cycles faces while the round resolves. */
 export function TumblingDie({ size = 64, accent = false }: { size?: number; accent?: boolean }) {
@@ -59,6 +60,7 @@ export function WheelFx({
     const step = 360 / count;
     // 4 full turns, then stop with the landed segment centred under the pointer
     const target = 4 * 360 + (360 - (landIndex * step + step / 2));
+    sfx.wheelLand(); // decelerating clacks matched to the landing
     const raf = requestAnimationFrame(() => requestAnimationFrame(() => setDeg(target)));
     return () => cancelAnimationFrame(raf);
   }, [landIndex, count]);
@@ -115,6 +117,7 @@ export function PlinkoFx({
     const t = setInterval(() => {
       k += 1;
       setStep(k);
+      if (k <= path.length) sfx.peg(k); // peg tick, pitch rising as it falls
       if (k > path.length) clearInterval(t);
     }, 130);
     return () => clearInterval(t);

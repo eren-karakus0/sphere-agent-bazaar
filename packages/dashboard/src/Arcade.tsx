@@ -25,6 +25,7 @@ import {
 import { GAME_UI, GAMES_META } from './arcade/games-ui';
 import { BotMark, Flame } from './arcade/art';
 import { WinBurst } from './arcade/fx';
+import { sfx } from './arcade/sound';
 
 interface IdLike {
   nametag?: string;
@@ -63,12 +64,23 @@ export function Arcade() {
   const [bet, setBet] = useState(1);
   // In-flight cash-out (chips → on-chain UCT), polled until it lands.
   const [cash, setCash] = useState<{ id: string; amount: number; status: 'pending' | 'landed' | 'failed'; txId?: string } | null>(null);
-  // Holds the verdict while a reveal animation (e.g. the wheel) lands.
+  // Reveal pacing: `suspense` keeps the pending animation running before the
+  // reveal shows; `settling` holds the verdict while a landing animation
+  // (wheel, plinko) plays out. The result itself is already committed.
+  const [suspense, setSuspense] = useState(false);
   const [settling, setSettling] = useState(false);
+  const suspenseTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const settleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const dealing = useRef(false);
+  const hold = suspense || settling;
 
-  useEffect(() => () => clearTimeout(settleTimer.current), []);
+  useEffect(
+    () => () => {
+      clearTimeout(settleTimer.current);
+      clearTimeout(suspenseTimer.current);
+    },
+    [],
+  );
 
   const meta = games.find((g) => g.id === selected) ?? GAMES_META.find((g) => g.id === selected)!;
   const ui = GAME_UI[selected]!;
@@ -168,6 +180,7 @@ export function Arcade() {
         if (!alive) return;
         if (s.win && s.win.status !== 'pending') {
           setCash({ ...cash, status: s.win.status, txId: s.win.txId });
+          if (s.win.status === 'landed') sfx.cashout();
           if (s.win.status === 'failed') {
             // the house put the chips back — mirror it locally
             setYou((prev) => (prev ? { ...prev, chips: prev.chips + cash.amount } : prev));
@@ -186,6 +199,24 @@ export function Arcade() {
       clearTimeout(timer);
     };
   }, [cash, refreshBoard]);
+
+  // Outcome stinger — plays once, exactly when the verdict becomes visible.
+  const soundedRound = useRef<string | null>(null);
+  useEffect(() => {
+    if (!result || hold) return;
+    if (soundedRound.current === result.roundId) return;
+    soundedRound.current = result.roundId;
+    if (result.jackpot?.hit) {
+      sfx.jackpot();
+    } else if (result.outcome === 'win') {
+      sfx.win();
+      if (result.streakBonus > 0 || result.dailyBonus > 0) setTimeout(() => sfx.bonus(), 500);
+    } else if (result.outcome === 'tie') {
+      sfx.push();
+    } else {
+      sfx.lose();
+    }
+  }, [result, hold]);
 
   const startCashOut = async () => {
     if (!wallet.identity || (you?.chips ?? 0) < 5 || cash?.status === 'pending') return;
@@ -227,19 +258,23 @@ export function Arcade() {
 
   const selectGame = (id: string) => {
     if (id === selected) return;
+    sfx.click();
     setSelected(id);
     setRound(null);
     setResult(null);
     setVerified(null);
     setError(null);
     clearTimeout(settleTimer.current);
+    clearTimeout(suspenseTimer.current);
     setSettling(false);
+    setSuspense(false);
   };
 
   const play = async (choice: unknown) => {
-    if (!round || status !== 'idle' || !wallet.identity) return;
+    if (!round || status !== 'idle' || hold || !wallet.identity) return;
     setStatus('playing');
     setError(null);
+    sfx.click();
     try {
       const res = await playRound({
         game: selected,
@@ -249,17 +284,33 @@ export function Arcade() {
         address: addressOf(wallet.identity),
         name: nameOf(wallet.identity),
       });
-      setRound(null);
       setResult(res);
       if (res.daily) {
         setYou({ streak: res.streak, best: res.best, daily: res.daily, chips: res.chips, chipsGranted: 0 });
       }
       setVerified(null);
+      // Pace the reveal: suspense (pending anim keeps running), then an
+      // optional landing phase — the outcome is already fixed either way.
+      const suspenseMs = GAME_UI[res.game]?.suspenseMs ?? 0;
       const settleMs = GAME_UI[res.game]?.settleMs ?? 0;
-      if (settleMs > 0) {
-        setSettling(true);
-        clearTimeout(settleTimer.current);
-        settleTimer.current = setTimeout(() => setSettling(false), settleMs);
+      clearTimeout(suspenseTimer.current);
+      clearTimeout(settleTimer.current);
+      const startSettle = () => {
+        setRound(null);
+        if (settleMs > 0) {
+          setSettling(true);
+          settleTimer.current = setTimeout(() => setSettling(false), settleMs);
+        }
+      };
+      if (suspenseMs > 0) {
+        setSuspense(true);
+        sfx.suspense(res.game);
+        suspenseTimer.current = setTimeout(() => {
+          setSuspense(false);
+          startSettle();
+        }, suspenseMs);
+      } else {
+        startSettle();
       }
       void (async () => {
         let ok = await verifyCommit(res.secret, res.nonce, res.commit);
@@ -299,6 +350,8 @@ export function Arcade() {
   };
 
   const again = () => {
+    sfx.click();
+    setRound(null); // the round is spent — force a fresh deal
     setResult(null);
     setVerified(null);
   };
@@ -370,7 +423,7 @@ export function Arcade() {
       </div>
 
       <div className="table">
-        {(outcome === 'win' || result?.jackpot?.hit) && !settling && (
+        {(outcome === 'win' || result?.jackpot?.hit) && !hold && (
           <WinBurst key={result!.nonce} big={result?.jackpot?.hit} />
         )}
         <div className="table__head">
@@ -378,15 +431,19 @@ export function Arcade() {
           <span className="table__blurb">{meta.blurb}</span>
         </div>
 
-        <ui.Stage round={round} result={result} pending={status === 'playing' || settling} />
+        <ui.Stage
+          round={round}
+          result={suspense ? null : result}
+          pending={status === 'playing' || hold}
+        />
 
         {ready !== true ? (
           <div className="commit commit--wait">
             <span className="dot" /> the dealer is waking up — usually under a minute
           </div>
-        ) : !result || settling ? (
+        ) : !result || hold ? (
           <>
-            {status === 'playing' || settling ? (
+            {status === 'playing' || hold ? (
               <div className="commit commit--wait">
                 <span className="dot" /> {settling ? 'watch it land…' : 'revealing…'}
               </div>
@@ -406,14 +463,17 @@ export function Arcade() {
               </div>
             )}
 
-            {status !== 'playing' && !settling && (
+            {status !== 'playing' && !hold && (
               <div className="betbar">
                 <span className="betbar__label">bet</span>
                 {[1, 2, 5, 10].map((b) => (
                   <button
                     key={b}
                     className={`betbtn${bet === b ? ' betbtn--on' : ''}`}
-                    onClick={() => setBet(b)}
+                    onClick={() => {
+                      sfx.bet();
+                      setBet(b);
+                    }}
                     disabled={(you?.chips ?? 0) < b}
                   >
                     {b}
@@ -431,7 +491,7 @@ export function Arcade() {
                 <button
                   className="again"
                   onClick={() => void play(makeClientSeed())}
-                  disabled={!round || status === 'playing' || (you?.chips ?? 0) < bet}
+                  disabled={!round || status === 'playing' || hold || (you?.chips ?? 0) < bet}
                 >
                   {ui.rollLabel ?? 'Play'}
                 </button>
@@ -443,7 +503,7 @@ export function Arcade() {
                     key={o.key}
                     className="gbtn"
                     onClick={() => void play(o.choice)}
-                    disabled={!round || status === 'playing' || (you?.chips ?? 0) < bet}
+                    disabled={!round || status === 'playing' || hold || (you?.chips ?? 0) < bet}
                     aria-label={o.name || o.key}
                   >
                     <span className="gbtn__art">{o.art}</span>

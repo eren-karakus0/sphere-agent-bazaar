@@ -101,6 +101,20 @@
   align-items: center;
   gap: 18px;
 }
+.mutebtn {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.mutebtn:hover { color: var(--accent); border-color: var(--border-focus); }
+
 .hdr__net {
   font-family: var(--font-mono);
   font-size: 10px;
