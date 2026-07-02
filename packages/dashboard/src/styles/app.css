@@ -34,6 +34,30 @@
     repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.014) 0 1px, transparent 1px 3px);
 }
 
+/* ---------------- Wall art (wide-screen ambient decor) ---------------- */
+.wallart { display: none; }
+@media (min-width: 1500px) {
+  .wallart { display: block; }
+}
+.wallart__piece {
+  position: fixed;
+  z-index: -1;
+  opacity: 0.11;
+  filter: blur(0.6px);
+  pointer-events: none;
+  animation: wall-drift 13s ease-in-out infinite;
+}
+.wallart__piece--l1 { left: 3vw; top: 18vh; animation-delay: 0s; }
+.wallart__piece--l2 { left: 6vw; top: 46vh; animation-delay: -4s; }
+.wallart__piece--l3 { left: 2.5vw; top: 72vh; animation-delay: -8s; }
+.wallart__piece--r1 { right: 3.5vw; top: 24vh; animation-delay: -2s; }
+.wallart__piece--r2 { right: 6vw; top: 52vh; animation-delay: -6s; }
+.wallart__piece--r3 { right: 2.5vw; top: 78vh; animation-delay: -10s; }
+@keyframes wall-drift {
+  0%, 100% { transform: translateY(0) rotate(-6deg); }
+  50% { transform: translateY(-16px) rotate(5deg); }
+}
+
 /* ---------------- Header ---------------- */
 .hdr {
   position: relative;
@@ -454,9 +478,19 @@
   display: flex;
   flex-direction: column;
   gap: 22px;
-  max-width: 720px;
+  max-width: 1160px;
   margin: 0 auto;
   width: 100%;
+}
+/* leaderboard + house panel share a row on wide screens */
+.arcade__duo {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 22px;
+  align-items: start;
+}
+@media (min-width: 980px) {
+  .arcade__duo { grid-template-columns: 1fr 1fr; }
 }
 .arcade__hero { text-align: center; }
 .arcade__title {
@@ -630,6 +664,10 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
   gap: 10px;
+}
+/* all seven cabinets in one row once there's room */
+@media (min-width: 1080px) {
+  .picker { grid-template-columns: repeat(7, 1fr); }
 }
 .gcard {
   display: flex;
@@ -840,6 +878,29 @@
   border-color: var(--accent);
 }
 .betbtn:disabled { opacity: 0.35; cursor: default; }
+.betbtn--max {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 6px 10px;
+}
+.betinput {
+  width: 74px;
+  padding: 6px 10px;
+  font-family: var(--font-display);
+  font-size: 15px;
+  text-align: center;
+  color: var(--accent);
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border-focus);
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+.betinput:focus { border-color: var(--accent); }
+.betinput::-webkit-outer-spin-button,
+.betinput::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.betinput[type='number'] { -moz-appearance: textfield; appearance: textfield; }
 .betbar__empty { color: var(--risk-medium); letter-spacing: 0.02em; }
 .events__streak { display: flex; align-items: center; gap: 8px; }
 .events__streak-n { font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
@@ -1304,7 +1365,8 @@
   .jpot__bulbs,
   .jpot__amount,
   .lockbox__tile,
-  .floorback__wheel {
+  .floorback__wheel,
+  .wallart__piece {
     animation: none !important;
   }
 }

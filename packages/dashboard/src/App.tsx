@@ -1,15 +1,42 @@
 import { useState } from 'react';
 import { Arcade } from './Arcade';
 import { ConnectWallet } from './ConnectWallet';
-import { Die } from './arcade/art';
+import { Card, Coin, Die, HandScissors, PlinkoMark } from './arcade/art';
 import { isMuted, setMuted, sfx } from './arcade/sound';
 
 export function App() {
   return (
     <div className="app">
+      <WallArt />
       <Header />
       <Arcade />
       <Footer />
+    </div>
+  );
+}
+
+/** Ambient wall decor for wide screens — dim game pieces drifting at the page edges. */
+function WallArt() {
+  return (
+    <div className="wallart" aria-hidden="true">
+      <span className="wallart__piece wallart__piece--l1">
+        <Die n={5} size={92} />
+      </span>
+      <span className="wallart__piece wallart__piece--l2">
+        <Card rank={1} size={84} />
+      </span>
+      <span className="wallart__piece wallart__piece--l3">
+        <HandScissors size={76} />
+      </span>
+      <span className="wallart__piece wallart__piece--r1">
+        <Coin side="heads" size={86} />
+      </span>
+      <span className="wallart__piece wallart__piece--r2">
+        <PlinkoMark size={90} />
+      </span>
+      <span className="wallart__piece wallart__piece--r3">
+        <Die n={2} size={70} />
+      </span>
     </div>
   );
 }

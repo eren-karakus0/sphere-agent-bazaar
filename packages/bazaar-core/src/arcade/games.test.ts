@@ -174,12 +174,12 @@ describe('progressive jackpot', () => {
     expect(stats.feed.some((e) => e.kind === 'jackpot')).toBe(true);
   });
 
-  it('rejects bets above the cap', async () => {
+  it('rejects bets above the balance (no fixed cap)', async () => {
     const dealer = new GameDealer({ agent: stubAgent([]), cooldownMs: 0 });
     const nr = dealer.newRound('coin', '@p2');
     await expect(
       dealer.play({ roundId: nr.roundId, choice: 'heads', bet: 26, playerAddress: '@p2' }),
-    ).rejects.toThrow(/bet/i);
+    ).rejects.toThrow(/chips/i);
   });
 });
 
@@ -233,7 +233,41 @@ describe('chips — bets, payouts and cash-out', () => {
     await dealer.flushPayouts();
     expect(dealer.settlementFor(co.settlementId).win?.status).toBe('landed');
     expect(sent.some((s) => s.memo === 'arcade-cashout' && s.amount === 25)).toBe(true);
-    expect(dealer.newRound('coin', '@p3').you?.chips).toBe(0); // no second top-up today
+    // the once-a-day rescue stakes them again…
+    expect(dealer.newRound('coin', '@p3').you?.chips).toBe(25);
+    // …but cashing out a second time leaves them done for the day
+    dealer.cashOut('@p3', 'p3');
+    expect(dealer.newRound('coin', '@p3').you?.chips).toBe(0);
+  });
+
+  it('can bet the whole stack (no 25 cap) and stakes a busted player once a day', async () => {
+    const sent: { address: string; amount: number; memo?: string }[] = [];
+    const dealer = new GameDealer({ agent: stubAgent(sent), cooldownMs: 0, jackpotOdds: 1_000_000_000 });
+    // burn the whole stack in all-in coin rounds until busted
+    let round = dealer.newRound('coin', '@p5');
+    expect(round.you?.chips).toBe(25);
+    for (let i = 0; i < 60; i++) {
+      const balance = round.you!.chips;
+      if (balance === 0) break;
+      const r = await dealer.play({
+        roundId: round.roundId,
+        choice: 'heads',
+        bet: balance, // all-in — over the old 25 cap once the stack grows
+        playerAddress: '@p5',
+        name: 'p5',
+      });
+      round = dealer.newRound('coin', '@p5');
+      if (r.outcome === 'lose') break;
+    }
+    // next deal after busting must stake them once more (the daily rescue)
+    const after = dealer.newRound('coin', '@p5');
+    expect(after.you?.chips).toBe(25);
+    // …but only once per day
+    // (drain again via cash-out, which does NOT re-trigger the rescue-by-itself
+    //  until the next deal — and the rescue day is already used)
+    dealer.cashOut('@p5', 'p5');
+    const locked = dealer.newRound('coin', '@p5');
+    expect(locked.you?.chips).toBe(0);
   });
 
   it('a failed cash-out puts the chips back', async () => {

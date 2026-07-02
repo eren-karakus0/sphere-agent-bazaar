@@ -7,6 +7,7 @@ import {
   applyWin,
   dailyView,
   newPlayerState,
+  rescueChips,
   todayKey,
   topUpChips,
   DAILY_CHIPS,
@@ -241,11 +242,15 @@ export class GameDealer {
     const commit = commitHash(secret, nonce);
     const roundId = `${gameId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     this.rounds.set(roundId, { gameId, secret, nonce, commit, publicState, createdAt: Date.now() });
-    // Daily chip top-up happens on the first deal of the day.
+    // Daily chip top-up on the first deal of the day; a busted (or fully
+    // cashed-out) stack gets staked once more per day so nobody sits locked out.
     const key = this.keyFor(playerAddress);
-    const topped = topUpChips(this.players.get(key) ?? newPlayerState(), todayKey());
-    this.players.set(key, topped.state);
-    const state = topped.state;
+    const day = todayKey();
+    const topped = topUpChips(this.players.get(key) ?? newPlayerState(), day);
+    const rescued = rescueChips(topped.state, day);
+    this.players.set(key, rescued.state);
+    const state = rescued.state;
+    const granted = topped.granted + rescued.granted;
     return {
       game: gameId,
       roundId,
@@ -257,9 +262,9 @@ export class GameDealer {
       you: {
         streak: state.streak,
         best: state.best,
-        daily: dailyView(state, todayKey()),
+        daily: dailyView(state, day),
         chips: state.chips,
-        chipsGranted: topped.granted,
+        chipsGranted: granted,
       },
     };
   }
@@ -283,11 +288,13 @@ export class GameDealer {
     if (!game) throw new Error('Unknown game.');
     const resolved = game.resolveInput(input.choice); // throws on invalid input
 
-    // The bet is staked from the player's chips — validate before the round is spent.
+    // The bet is staked from the player's chips — validate before the round is
+    // spent. Any size goes, as long as the balance covers it.
     const bet = Math.floor(Number(input.bet ?? 1));
-    if (!Number.isFinite(bet) || bet < 1 || bet > 25) throw new Error('Bet must be between 1 and 25 chips.');
+    if (!Number.isSafeInteger(bet) || bet < 1) throw new Error('Bet must be a whole number of chips (1+).');
     const key = this.keyFor(input.playerAddress);
-    let state = topUpChips(this.players.get(key) ?? newPlayerState(), todayKey()).state;
+    const day = todayKey();
+    let state = rescueChips(topUpChips(this.players.get(key) ?? newPlayerState(), day).state, day).state;
     if (state.chips < bet) {
       throw new Error(`Not enough chips — you have ${state.chips}. The daily top-up refills to ${DAILY_CHIPS}.`);
     }

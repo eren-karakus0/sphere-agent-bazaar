@@ -507,7 +507,7 @@ export function Arcade() {
             {status !== 'playing' && !hold && (
               <div className="betbar">
                 <span className="betbar__label">bet</span>
-                {[1, 2, 5, 10].map((b) => (
+                {[1, 5, 10, 25].map((b) => (
                   <button
                     key={b}
                     className={`betbtn${bet === b ? ' betbtn--on' : ''}`}
@@ -520,10 +520,31 @@ export function Arcade() {
                     {b}
                   </button>
                 ))}
+                <input
+                  className="betinput"
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={bet}
+                  onChange={(e) => setBet(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+                  aria-label="bet amount in chips"
+                />
+                <button
+                  className="betbtn betbtn--max"
+                  onClick={() => {
+                    sfx.bet();
+                    setBet(Math.max(1, you?.chips ?? 1));
+                  }}
+                  disabled={(you?.chips ?? 0) < 1}
+                >
+                  max
+                </button>
                 <span className="betbar__unit">chips</span>
-                {(you?.chips ?? 0) === 0 && (
-                  <span className="betbar__empty">out of chips — the daily top-up refills to 25</span>
-                )}
+                {(you?.chips ?? 0) === 0 ? (
+                  <span className="betbar__empty">out of chips for today — fresh 25 at 00:00 UTC</span>
+                ) : (you?.chips ?? 0) < bet ? (
+                  <span className="betbar__empty">bet is over your {you?.chips} chip balance</span>
+                ) : null}
               </div>
             )}
 
@@ -614,30 +635,32 @@ export function Arcade() {
         {error && <div className="tryit__error">⚠ {error}</div>}
       </div>
 
-      <div className="board">
-        <div className="board__head">
-          <span className="board__title">Leaderboard</span>
-          <span className="board__note">across all games · recent standings</span>
-        </div>
-        {board.length === 0 ? (
-          <div className="empty">No games yet — be the first to beat the house.</div>
-        ) : (
-          <div className="board__rows">
-            {board.map((r, i) => (
-              <div className="brow" key={r.name}>
-                <span className="brow__rank">{i + 1}</span>
-                <span className="brow__name">@{r.name}</span>
-                <span className="brow__wl">
-                  {r.wins}W · {r.losses}L · {r.ties}T
-                </span>
-                <span className="brow__earned">{r.earnedUct} chips</span>
-              </div>
-            ))}
+      <div className="arcade__duo">
+        <div className="board">
+          <div className="board__head">
+            <span className="board__title">Leaderboard</span>
+            <span className="board__note">across all games · recent standings</span>
           </div>
-        )}
-      </div>
+          {board.length === 0 ? (
+            <div className="empty">No games yet — be the first to beat the house.</div>
+          ) : (
+            <div className="board__rows">
+              {board.map((r, i) => (
+                <div className="brow" key={r.name}>
+                  <span className="brow__rank">{i + 1}</span>
+                  <span className="brow__name">@{r.name}</span>
+                  <span className="brow__wl">
+                    {r.wins}W · {r.losses}L · {r.ties}T
+                  </span>
+                  <span className="brow__earned">{r.earnedUct} chips</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
-      <HousePanel stats={houseStats} house={house} games={games} />
+        <HousePanel stats={houseStats} house={house} games={games} />
+      </div>
     </section>
   );
 }

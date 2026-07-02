@@ -12,6 +12,8 @@ export interface PlayerState {
   chips: number;
   /** UTC day the last daily chip top-up was applied. */
   chipsDay: string;
+  /** UTC day the once-a-day bust rescue was used. */
+  rescueDay: string;
 }
 
 export const DAILY_GOAL = 5;
@@ -19,7 +21,16 @@ export const DAILY_REWARD = 10;
 export const DAILY_CHIPS = 25;
 
 export function newPlayerState(): PlayerState {
-  return { streak: 0, best: 0, dailyDay: '', dailyWins: 0, dailyClaimed: false, chips: 0, chipsDay: '' };
+  return {
+    streak: 0,
+    best: 0,
+    dailyDay: '',
+    dailyWins: 0,
+    dailyClaimed: false,
+    chips: 0,
+    chipsDay: '',
+    rescueDay: '',
+  };
 }
 
 /**
@@ -33,6 +44,20 @@ export function topUpChips(prev: PlayerState, day: string, floor: number = DAILY
   if (prev.chipsDay === day) return { state: prev, granted: 0 };
   const chips = Math.max(prev.chips, floor);
   return { state: { ...prev, chips, chipsDay: day }, granted: chips - prev.chips };
+}
+
+/**
+ * Once a day, a player sitting on zero chips (busted or fully cashed out) gets
+ * staked once more so they can keep playing. Independent of the daily top-up,
+ * and not farmable: extraction still only happens via cash-out, capped at
+ * (top-up + one rescue) per day.
+ */
+export function rescueChips(prev: PlayerState, day: string, stake: number = DAILY_CHIPS): {
+  state: PlayerState;
+  granted: number;
+} {
+  if (prev.chips > 0 || prev.rescueDay === day) return { state: prev, granted: 0 };
+  return { state: { ...prev, chips: stake, rescueDay: day }, granted: stake };
 }
 
 export function todayKey(now: number = Date.now()): string {
