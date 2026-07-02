@@ -203,7 +203,7 @@ export function Arcade() {
   if (!hasBackend()) {
     return (
       <section className="arcade">
-        <div className="empty">The arcade needs the live backend — it isn&apos;t configured here.</div>
+        <div className="empty">The game hall is offline in this build.</div>
       </section>
     );
   }
@@ -271,7 +271,7 @@ export function Arcade() {
 
         {ready !== true ? (
           <div className="commit commit--wait">
-            <span className="dot" /> waking the dealer… free-tier cold start, up to ~1 min
+            <span className="dot" /> the dealer is waking up — usually under a minute
           </div>
         ) : !result || settling ? (
           <>
@@ -333,7 +333,9 @@ export function Arcade() {
                 result.paid ? (
                   <span className="pay pay--ok">✓ {result.rewardUct} UCT sent to your wallet</span>
                 ) : (
-                  <span className="pay pay--pend">payout pending — {result.payoutError ?? 'retrying on testnet'}</span>
+                  <span className="pay pay--pend" title={result.payoutError}>
+                    the payout hit a testnet hiccup and didn&apos;t go through — your win still counts on the board
+                  </span>
                 )
               ) : outcome === 'tie' ? (
                 <span className="pay">a push — no payout, go again</span>
@@ -373,7 +375,7 @@ export function Arcade() {
       <div className="board">
         <div className="board__head">
           <span className="board__title">Leaderboard</span>
-          <span className="board__note">across all games · resets on redeploy</span>
+          <span className="board__note">across all games · recent standings</span>
         </div>
         {board.length === 0 ? (
           <div className="empty">No games yet — be the first to beat the house.</div>
@@ -472,7 +474,7 @@ function HousePanel({
         </div>
       )}
       <div className="housep__note">
-        every number above is real: balance read from the wallet, payouts settled on testnet2 · since last restart
+        every number is real — balance read live from the house wallet, payouts settled on testnet2 · recent totals
       </div>
     </div>
   );
