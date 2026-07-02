@@ -10,7 +10,7 @@ export const diceGame: Game = {
   id: 'dice',
   title: 'Dice Duel',
   blurb: 'You and the house each roll — higher wins. Both dice come from your seed + the house’s sealed seed.',
-  rewardMult: 1,
+  rewardMult: 2,
   inputKind: 'seed',
   deal() {
     return { secret: serverSeed() };
@@ -23,6 +23,6 @@ export const diceGame: Game = {
   judge(secret, input) {
     const { house, player } = deriveDicePair(secret, input as string);
     const outcome = player > house ? 'win' : player < house ? 'lose' : 'tie';
-    return { outcome, rewardMult: 1, reveal: { playerRoll: player, dealerRoll: house, clientSeed: input } };
+    return { outcome, rewardMult: 2, reveal: { playerRoll: player, dealerRoll: house, clientSeed: input } };
   },
 };

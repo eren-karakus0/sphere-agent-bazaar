@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useWalletCtx } from './WalletContext';
 import {
+  cashOut,
   fetchLeaderboard,
   fetchSettlement,
   hasBackend,
@@ -54,11 +55,14 @@ export function Arcade() {
   const [house, setHouse] = useState<string | null>(null);
   const [houseStats, setHouseStats] = useState<HouseStats | null>(null);
   const [pot, setPot] = useState<number | null>(null);
-  const [baseReward, setBaseReward] = useState(1);
   const [you, setYou] = useState<PlayerSnapshot | null>(null);
   const [dailyDef, setDailyDef] = useState<{ goal: number; reward: number } | null>(null);
   // The round's background on-chain payout (win/jackpot), polled until it lands.
   const [stl, setStl] = useState<RoundSettlement | null>(null);
+  // Chips staked per round.
+  const [bet, setBet] = useState(1);
+  // In-flight cash-out (chips → on-chain UCT), polled until it lands.
+  const [cash, setCash] = useState<{ id: string; amount: number; status: 'pending' | 'landed' | 'failed'; txId?: string } | null>(null);
   // Holds the verdict while a reveal animation (e.g. the wheel) lands.
   const [settling, setSettling] = useState(false);
   const settleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -72,7 +76,6 @@ export function Arcade() {
   const applyBoard = useCallback((b: Awaited<ReturnType<typeof fetchLeaderboard>>) => {
     setBoard(b.rows);
     if (b.house) setHouse(b.house);
-    if (b.baseRewardUct) setBaseReward(b.baseRewardUct);
     if (b.games?.length) setGames(b.games);
     if (b.daily) setDailyDef(b.daily);
     if (b.houseStats) {
@@ -121,15 +124,13 @@ export function Arcade() {
     return () => clearInterval(t);
   }, [connected, ready, refreshBoard]);
 
-  // Poll the background payout until it lands (or fails) on-chain.
+  // Poll the jackpot's background on-chain payout until it lands (or fails).
   useEffect(() => {
     if (!result) {
       setStl(null);
       return;
     }
-    const needWin = !!result.settling;
-    const needJackpot = !!result.jackpot?.hit;
-    if (!needWin && !needJackpot) return;
+    if (!result.jackpot?.hit) return;
     let alive = true;
     let tries = 0;
     let timer: ReturnType<typeof setTimeout>;
@@ -140,9 +141,7 @@ export function Arcade() {
         const s = await fetchSettlement(result.roundId);
         if (!alive) return;
         setStl(s);
-        const winDone = !needWin || (s.win !== undefined && s.win.status !== 'pending');
-        const jackpotDone = !needJackpot || (s.jackpot !== undefined && s.jackpot.status !== 'pending');
-        done = winDone && jackpotDone;
+        done = s.jackpot !== undefined && s.jackpot.status !== 'pending';
         if (done) refreshBoard();
       } catch {
         /* transient — keep polling */
@@ -155,6 +154,49 @@ export function Arcade() {
       clearTimeout(timer);
     };
   }, [result, refreshBoard]);
+
+  // Poll an in-flight cash-out until the UCT transfer lands.
+  useEffect(() => {
+    if (!cash || cash.status !== 'pending') return;
+    let alive = true;
+    let tries = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      tries += 1;
+      try {
+        const s = await fetchSettlement(cash.id);
+        if (!alive) return;
+        if (s.win && s.win.status !== 'pending') {
+          setCash({ ...cash, status: s.win.status, txId: s.win.txId });
+          if (s.win.status === 'failed') {
+            // the house put the chips back — mirror it locally
+            setYou((prev) => (prev ? { ...prev, chips: prev.chips + cash.amount } : prev));
+          }
+          refreshBoard();
+          return;
+        }
+      } catch {
+        /* transient — keep polling */
+      }
+      if (alive && tries < 25) timer = setTimeout(poll, 1300);
+    };
+    timer = setTimeout(poll, 800);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [cash, refreshBoard]);
+
+  const startCashOut = async () => {
+    if (!wallet.identity || (you?.chips ?? 0) < 5 || cash?.status === 'pending') return;
+    try {
+      const r = await cashOut(addressOf(wallet.identity)!, nameOf(wallet.identity));
+      setCash({ id: r.settlementId, amount: r.amountUct, status: 'pending' });
+      setYou((prev) => (prev ? { ...prev, chips: 0 } : prev));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Cash-out failed.');
+    }
+  };
 
   const deal = useCallback(
     async (gameId: string) => {
@@ -203,12 +245,15 @@ export function Arcade() {
         game: selected,
         roundId: round.roundId,
         choice,
+        bet,
         address: addressOf(wallet.identity),
         name: nameOf(wallet.identity),
       });
       setRound(null);
       setResult(res);
-      if (res.daily) setYou({ streak: res.streak, best: res.best, daily: res.daily });
+      if (res.daily) {
+        setYou({ streak: res.streak, best: res.best, daily: res.daily, chips: res.chips, chipsGranted: 0 });
+      }
       setVerified(null);
       const settleMs = GAME_UI[res.game]?.settleMs ?? 0;
       if (settleMs > 0) {
@@ -291,7 +336,7 @@ export function Arcade() {
     <section className="arcade">
       <Hero house={house} />
 
-      <EventsBar you={you} dailyDef={dailyDef} />
+      <EventsBar you={you} dailyDef={dailyDef} cash={cash} onCashOut={() => void startCashOut()} />
 
       {pot != null && (
         <div className="jpot" title="Grows every round; a provably-fair roll can hit it in any game — the house agent pays the whole pot on-chain.">
@@ -318,9 +363,7 @@ export function Arcade() {
                   <Icon size={40} />
                 </div>
                 <div className="gcard__title">{g.title}</div>
-                <div className="gcard__reward">
-                  {GAME_UI[g.id]!.reward?.(baseReward) ?? `win ${baseReward * g.rewardMult} UCT`}
-                </div>
+                <div className="gcard__reward">{GAME_UI[g.id]!.reward?.() ?? `pays ×${g.rewardMult}`}</div>
               </button>
             );
           })}
@@ -363,12 +406,32 @@ export function Arcade() {
               </div>
             )}
 
+            {status !== 'playing' && !settling && (
+              <div className="betbar">
+                <span className="betbar__label">bet</span>
+                {[1, 2, 5, 10].map((b) => (
+                  <button
+                    key={b}
+                    className={`betbtn${bet === b ? ' betbtn--on' : ''}`}
+                    onClick={() => setBet(b)}
+                    disabled={(you?.chips ?? 0) < b}
+                  >
+                    {b}
+                  </button>
+                ))}
+                <span className="betbar__unit">chips</span>
+                {(you?.chips ?? 0) === 0 && (
+                  <span className="betbar__empty">out of chips — the daily top-up refills to 25</span>
+                )}
+              </div>
+            )}
+
             {meta.inputKind === 'seed' ? (
               <div className="gbtns">
                 <button
                   className="again"
                   onClick={() => void play(makeClientSeed())}
-                  disabled={!round || status === 'playing'}
+                  disabled={!round || status === 'playing' || (you?.chips ?? 0) < bet}
                 >
                   {ui.rollLabel ?? 'Play'}
                 </button>
@@ -380,7 +443,7 @@ export function Arcade() {
                     key={o.key}
                     className="gbtn"
                     onClick={() => void play(o.choice)}
-                    disabled={!round || status === 'playing'}
+                    disabled={!round || status === 'playing' || (you?.chips ?? 0) < bet}
                     aria-label={o.name || o.key}
                   >
                     <span className="gbtn__art">{o.art}</span>
@@ -406,25 +469,19 @@ export function Arcade() {
               </div>
             )}
             <div className={`gverdict verdict--${outcome}`}>
-              {outcome === 'win' ? `YOU WON +${result.rewardUct} UCT` : outcome === 'lose' ? 'YOU LOST' : 'PUSH'}
+              {outcome === 'win'
+                ? `YOU WON +${result.rewardUct} CHIPS`
+                : outcome === 'lose'
+                  ? `YOU LOST ${result.bet} ${result.bet === 1 ? 'CHIP' : 'CHIPS'}`
+                  : 'PUSH'}
             </div>
             <div className="outcome__pay">
               {outcome === 'win' ? (
-                stl?.win?.status === 'landed' ? (
-                  <span className="pay pay--ok">✓ {result.rewardUct} UCT sent to your wallet</span>
-                ) : stl?.win?.status === 'failed' ? (
-                  <span className="pay pay--pend" title={stl.win.error}>
-                    the payout hit a testnet hiccup and didn&apos;t go through — your win still counts on the board
-                  </span>
-                ) : (
-                  <span className="pay pay--pend">
-                    <span className="dot" /> paying you on-chain…
-                  </span>
-                )
+                <span className="pay pay--ok">✓ added to your stack — balance {result.chips} chips</span>
               ) : outcome === 'tie' ? (
-                <span className="pay">a push — no payout, go again</span>
+                <span className="pay">a push — your bet came back</span>
               ) : (
-                <span className="pay">the house took this one</span>
+                <span className="pay">your bet went to the house</span>
               )}
             </div>
             {outcome === 'win' && (result.streakBonus > 0 || result.dailyBonus > 0) && (
@@ -435,8 +492,8 @@ export function Arcade() {
                 {result.dailyBonus > 0 ? ` daily bonus +${result.dailyBonus}` : ''} UCT
               </div>
             )}
-            {outcome === 'win' && stl?.win?.status === 'landed' && stl.win.txId && (
-              <TxProof id={stl.win.txId} delivery={stl.win.delivery} />
+            {result.jackpot?.hit && stl?.jackpot?.status === 'landed' && stl.jackpot.txId && (
+              <TxProof id={stl.jackpot.txId} delivery={stl.jackpot.delivery} />
             )}
             <div className="outcome__verify">
               {verified === null ? (
@@ -472,7 +529,7 @@ export function Arcade() {
                 <span className="brow__wl">
                   {r.wins}W · {r.losses}L · {r.ties}T
                 </span>
-                <span className="brow__earned">{r.earnedUct} UCT</span>
+                <span className="brow__earned">{r.earnedUct} chips</span>
               </div>
             ))}
           </div>
@@ -497,7 +554,7 @@ const gameTitle = (games: GameMeta[], id?: string) => games.find((g) => g.id ===
 
 /** Scrolling strip of real recent payouts from the house feed. */
 function HouseTicker({ feed, games }: { feed: HouseEvent[]; games: GameMeta[] }) {
-  const wins = feed.filter((e) => e.kind === 'win' || e.kind === 'jackpot').slice(0, 8);
+  const wins = feed.filter((e) => e.kind !== 'mint').slice(0, 8);
   if (wins.length === 0) return null;
   const items = (dup: boolean) =>
     wins.map((w, i) => (
@@ -507,14 +564,17 @@ function HouseTicker({ feed, games }: { feed: HouseEvent[]; games: GameMeta[] })
         aria-hidden={dup}
       >
         <strong>@{w.name}</strong>{' '}
-        {w.kind === 'jackpot' ? `HIT THE ${w.amountUct} UCT JACKPOT` : `won ${w.amountUct} UCT`} on{' '}
-        {gameTitle(games, w.game)}
+        {w.kind === 'jackpot'
+          ? `HIT THE ${w.amountUct} UCT JACKPOT on ${gameTitle(games, w.game)}`
+          : w.kind === 'cashout'
+            ? `cashed out ${w.amountUct} UCT on-chain`
+            : `won ${w.amountUct} UCT on ${gameTitle(games, w.game)}`}
         <em> · {timeAgo(w.at)}</em>
       </span>
     ));
   return (
-    <div className="ticker" aria-label="recent wins, paid on-chain by the house agent">
-      <span className="ticker__tag">live wins</span>
+    <div className="ticker" aria-label="recent payouts, sent on-chain by the house agent">
+      <span className="ticker__tag">live payouts</span>
       <div className="ticker__clip">
         <div className="ticker__track">
           {items(false)}
@@ -561,7 +621,9 @@ function HousePanel({
                   ? `treasury low — the agent minted itself +${e.amountUct} UCT`
                   : e.kind === 'jackpot'
                     ? `JACKPOT — paid @${e.name} the whole ${e.amountUct} UCT pot · ${gameTitle(games, e.game)}`
-                    : `paid @${e.name} +${e.amountUct} UCT · ${gameTitle(games, e.game)}`}
+                    : e.kind === 'cashout'
+                      ? `cashed @${e.name} out — ${e.amountUct} UCT sent on-chain`
+                      : `paid @${e.name} +${e.amountUct} UCT · ${gameTitle(games, e.game)}`}
               </span>
               <span className="hevent__t">{timeAgo(e.at)}</span>
             </div>
@@ -589,8 +651,8 @@ function Hero({ house }: { house: string | null }) {
     <div className="arcade__hero">
       <h2 className="arcade__title">The Game Hall</h2>
       <p className="arcade__lede">
-        A hall of provably-fair games vs an autonomous house. Win and it pays you real testnet UCT
-        on-chain — automatically, no human in the loop.
+        A hall of provably-fair games vs an autonomous house. Bet chips, win multipliers, and cash
+        out real testnet UCT — sent on-chain by the agent itself, no human in the loop.
       </p>
       <div className="arcade__meta">
         <span className="arcade__chip arcade__chip--house">
@@ -608,10 +670,15 @@ function Hero({ house }: { house: string | null }) {
 function EventsBar({
   you,
   dailyDef,
+  cash,
+  onCashOut,
 }: {
   you: PlayerSnapshot | null;
   dailyDef: { goal: number; reward: number } | null;
+  cash: { id: string; amount: number; status: 'pending' | 'landed' | 'failed'; txId?: string } | null;
+  onCashOut: () => void;
 }) {
+  const chips = you?.chips ?? null;
   const streak = you?.streak ?? 0;
   const goal = you?.daily?.goal ?? dailyDef?.goal ?? 5;
   const wins = you?.daily?.wins ?? 0;
@@ -620,6 +687,28 @@ function EventsBar({
   const pct = claimed ? 100 : Math.min(100, Math.round((wins / goal) * 100));
   return (
     <div className="events">
+      <div className="events__chips">
+        <div className="events__chips-top">
+          <span className="events__chips-n">{chips ?? '…'}</span>
+          <span className="events__chips-l">chips</span>
+        </div>
+        <button
+          className="cashout"
+          onClick={onCashOut}
+          disabled={(chips ?? 0) < 5 || cash?.status === 'pending'}
+          title="Convert your chips 1:1 into real UCT — the house agent sends it to your wallet on-chain. Minimum 5 chips."
+        >
+          {cash?.status === 'pending' ? 'sending on-chain…' : 'cash out → UCT'}
+        </button>
+        {cash?.status === 'landed' && (
+          <div className="events__cash events__cash--ok" title={cash.txId}>
+            ✓ {cash.amount} UCT sent on-chain
+          </div>
+        )}
+        {cash?.status === 'failed' && (
+          <div className="events__cash events__cash--bad">testnet hiccup — chips returned</div>
+        )}
+      </div>
       <div className="events__streak">
         <span
           className={`events__flame${streak > 0 ? ' events__flame--lit' : ''}${streak >= 5 ? ' events__flame--hot' : ''}`}
@@ -632,7 +721,7 @@ function EventsBar({
       <div className="events__daily">
         <div className="events__daily-top">
           <span>Daily challenge · win {goal}</span>
-          <span className="events__daily-reward">{claimed ? '✓ claimed' : `+${reward} UCT`}</span>
+          <span className="events__daily-reward">{claimed ? '✓ claimed' : `+${reward} chips`}</span>
         </div>
         <div className="events__bar">
           <div className="events__fill" style={{ width: `${pct}%` }} />

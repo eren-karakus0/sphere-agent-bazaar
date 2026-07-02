@@ -194,7 +194,7 @@ export function Flame({ size = 20, dim = false }: { size?: number; dim?: boolean
 }
 
 /* ---- Lucky Wheel ---- */
-const DEFAULT_WHEEL: readonly number[] = [0, 1, 0, 2, 0, 1, 0, 2, 0, 5];
+const DEFAULT_WHEEL: readonly number[] = [0, 1, 0, 1, 0, 2, 0, 1, 0, 1, 0, 5];
 
 function wheelPolar(r: number, deg: number): [number, number] {
   const a = ((deg - 90) * Math.PI) / 180;

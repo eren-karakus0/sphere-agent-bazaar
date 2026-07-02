@@ -92,7 +92,8 @@ describe('lucky wheel (two-seed provably fair)', () => {
     const r = wheelGame.judge('deadbeef', 'player123');
     expect(r.reveal.segmentIndex).toBe(index);
     expect(r.rewardMult).toBe(WHEEL_SEGMENTS[index]);
-    expect(r.outcome).toBe(WHEEL_SEGMENTS[index]! > 0 ? 'win' : 'lose');
+    const m = WHEEL_SEGMENTS[index]!;
+    expect(r.outcome).toBe(m > 1 ? 'win' : m === 1 ? 'tie' : 'lose');
   });
   it('has losing segments and a ×5 jackpot', () => {
     expect(WHEEL_SEGMENTS).toContain(0);
@@ -118,7 +119,8 @@ describe('plinko (two-seed provably fair)', () => {
     expect(r.reveal.path).toEqual(path);
     expect(r.reveal.bucketIndex).toBe(bucket);
     expect(r.rewardMult).toBe(PLINKO_MULTIPLIERS[bucket]);
-    expect(r.outcome).toBe(PLINKO_MULTIPLIERS[bucket]! > 0 ? 'win' : 'lose');
+    const m = PLINKO_MULTIPLIERS[bucket]!;
+    expect(r.outcome).toBe(m > 1 ? 'win' : m === 1 ? 'tie' : 'lose');
   });
   it('publishes the board layout up front and has symmetric ×10 edges', () => {
     const { publicState } = plinkoGame.deal();
@@ -172,28 +174,83 @@ describe('progressive jackpot', () => {
     expect(stats.feed.some((e) => e.kind === 'jackpot')).toBe(true);
   });
 
-  it('reveals instantly: a win is settling, then lands with a tx id', async () => {
+  it('rejects bets above the cap', async () => {
+    const dealer = new GameDealer({ agent: stubAgent([]), cooldownMs: 0 });
+    const nr = dealer.newRound('coin', '@p2');
+    await expect(
+      dealer.play({ roundId: nr.roundId, choice: 'heads', bet: 26, playerAddress: '@p2' }),
+    ).rejects.toThrow(/bet/i);
+  });
+});
+
+describe('chips — bets, payouts and cash-out', () => {
+  const stubAgent = (sent: { address: string; amount: number; memo?: string }[]) =>
+    ({
+      nametag: 'house-test',
+      balanceUct: async () => 1000,
+      mintUct: async () => undefined,
+      send: async (address: string, amount: number, memo?: string) => {
+        sent.push({ address, amount, memo });
+        return { id: `tx-${sent.length}`, deliveryState: 'landed' };
+      },
+    }) as unknown as SphereAgent;
+
+  it('grants the daily 25, stakes bets, credits ×2 wins, sinks losses', async () => {
     const sent: { address: string; amount: number; memo?: string }[] = [];
-    const dealer = new GameDealer({
-      agent: stubAgent(sent),
-      cooldownMs: 0,
-      jackpotOdds: 1_000_000_000,
-    });
-    // brute a guaranteed win: coin judge('heads','heads') — deal until secret is heads
-    let res;
-    for (let i = 0; i < 40 && !res; i++) {
-      const nr = dealer.newRound('coin', '@p1');
-      const r = await dealer.play({ roundId: nr.roundId, choice: 'heads', playerAddress: '@p1', name: 'p1' });
-      if (r.outcome === 'win') res = { r, roundId: nr.roundId };
+    const dealer = new GameDealer({ agent: stubAgent(sent), cooldownMs: 0, jackpotOdds: 1_000_000_000 });
+    let round = dealer.newRound('coin', '@p1');
+    expect(round.you?.chips).toBe(25); // daily top-up on first deal
+    expect(round.you?.chipsGranted).toBe(25);
+    let win: Awaited<ReturnType<GameDealer['play']>> | undefined;
+    let lose: typeof win;
+    for (let i = 0; i < 80 && !(win && lose); i++) {
+      let r: NonNullable<typeof win>;
+      try {
+        r = await dealer.play({ roundId: round.roundId, choice: 'heads', bet: 1, playerAddress: '@p1', name: 'p1' });
+      } catch {
+        break; // busted — statistically near-impossible, but never fail on it
+      }
+      if (r.outcome === 'win' && !win) win = r;
+      if (r.outcome === 'lose' && !lose) lose = r;
+      expect(r.chips).toBeGreaterThanOrEqual(0);
+      round = dealer.newRound('coin', '@p1');
     }
-    expect(res).toBeTruthy();
-    expect(res!.r.paid).toBe(false); // not settled yet at reveal time
-    expect(res!.r.settling).toBe(true);
+    expect(win).toBeTruthy();
+    expect(lose).toBeTruthy();
+    expect(win!.bet).toBe(1);
+    expect(win!.rewardUct).toBeGreaterThanOrEqual(2); // bet ×2 (+ any bonus)
+    expect(lose!.rewardUct).toBe(0); // the bet sank to the house
+    expect(sent.every((s) => s.memo !== 'arcade-win')).toBe(true); // wins pay chips, not on-chain
+  });
+
+  it('cash-out settles the whole balance on-chain and zeroes the chips', async () => {
+    const sent: { address: string; amount: number; memo?: string }[] = [];
+    const dealer = new GameDealer({ agent: stubAgent(sent), cooldownMs: 0 });
+    const nr = dealer.newRound('coin', '@p3'); // grants 25
+    expect(nr.you?.chips).toBe(25);
+    const co = dealer.cashOut('@p3', 'p3');
+    expect(co.amountUct).toBe(25);
     await dealer.flushPayouts();
-    const s = dealer.settlementFor(res!.roundId);
-    expect(s.win?.status).toBe('landed');
-    expect(s.win?.txId).toBeTruthy();
-    expect(sent.some((m) => m.memo === 'arcade-win')).toBe(true);
+    expect(dealer.settlementFor(co.settlementId).win?.status).toBe('landed');
+    expect(sent.some((s) => s.memo === 'arcade-cashout' && s.amount === 25)).toBe(true);
+    expect(dealer.newRound('coin', '@p3').you?.chips).toBe(0); // no second top-up today
+  });
+
+  it('a failed cash-out puts the chips back', async () => {
+    const failing = {
+      nametag: 'house-test',
+      balanceUct: async () => 1000,
+      mintUct: async () => undefined,
+      send: async () => {
+        throw new Error('testnet down');
+      },
+    } as unknown as SphereAgent;
+    const dealer = new GameDealer({ agent: failing, cooldownMs: 0 });
+    dealer.newRound('coin', '@p4'); // grants 25
+    const co = dealer.cashOut('@p4', 'p4');
+    await dealer.flushPayouts();
+    expect(dealer.settlementFor(co.settlementId).win?.status).toBe('failed');
+    expect(dealer.newRound('coin', '@p4').you?.chips).toBe(25); // restored
   });
 
   it('grows the pot (capped) when the roll misses', async () => {

@@ -5,7 +5,7 @@ export const rpsGame: Game = {
   id: 'rps',
   title: 'Rock · Paper · Scissors',
   blurb: 'The classic. Beat the house’s sealed move.',
-  rewardMult: 1,
+  rewardMult: 2,
   inputKind: 'choice',
   deal() {
     return { secret: randomMove() };
@@ -16,6 +16,6 @@ export const rpsGame: Game = {
   },
   judge(secret, input) {
     const outcome = judgeRps(input as Move, secret as Move);
-    return { outcome, rewardMult: 1, reveal: { dealerMove: secret, playerMove: input } };
+    return { outcome, rewardMult: 2, reveal: { dealerMove: secret, playerMove: input } };
   },
 };

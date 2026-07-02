@@ -8,6 +8,8 @@ import {
   dailyView,
   newPlayerState,
   todayKey,
+  topUpChips,
+  DAILY_CHIPS,
   DAILY_GOAL,
   DAILY_REWARD,
   type DailyView,
@@ -51,6 +53,10 @@ export interface PlayerSnapshot {
   streak: number;
   best: number;
   daily: DailyView;
+  /** Chip balance (bets are staked from it; cash-out pays it 1:1 in UCT). */
+  chips: number;
+  /** Chips granted by today's top-up in this call (0 when already topped up). */
+  chipsGranted: number;
 }
 
 export interface NewRound {
@@ -88,18 +94,16 @@ export interface PlayResult {
   game: string;
   roundId: string;
   outcome: Outcome;
+  /** Chips credited this round (win: bet × multiplier + bonuses; tie: the bet back). */
   rewardUct: number;
+  /** The chips staked on this round. */
+  bet: number;
+  /** The player's chip balance after the round. */
+  chips: number;
   commit: string;
   secret: string;
   nonce: string;
   reveal: Record<string, unknown>;
-  paid: boolean;
-  /** True when a payout was queued and is settling on-chain in the background. */
-  settling?: boolean;
-  payoutError?: string;
-  txId?: string;
-  txRef?: string;
-  delivery?: string;
   /** Engagement layer. */
   streak: number;
   best: number;
@@ -128,9 +132,9 @@ export interface LeaderRow {
   earnedUct: number;
 }
 
-/** A public house-side event: a paid win, a jackpot, or the agent self-funding its treasury. */
+/** A public house-side event: an on-chain cash-out, a jackpot, or the agent self-funding its treasury. */
 export interface HouseEvent {
-  kind: 'win' | 'mint' | 'jackpot';
+  kind: 'win' | 'mint' | 'jackpot' | 'cashout';
   at: number;
   amountUct: number;
   name?: string;
@@ -143,7 +147,6 @@ export interface HouseStats {
   treasuryUct: number | null;
   paidOutUct: number;
   roundsPlayed: number;
-  winsPaid: number;
   selfMintedUct: number;
   /** The current progressive-jackpot pot. */
   jackpotUct: number;
@@ -187,7 +190,6 @@ export class GameDealer {
   // House transparency (since last restart).
   private paidOut = 0;
   private roundsPlayed = 0;
-  private winsPaid = 0;
   private minted = 0;
   private feed: HouseEvent[] = [];
   private treasury: number | null = null;
@@ -239,7 +241,11 @@ export class GameDealer {
     const commit = commitHash(secret, nonce);
     const roundId = `${gameId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     this.rounds.set(roundId, { gameId, secret, nonce, commit, publicState, createdAt: Date.now() });
-    const state = this.players.get(this.keyFor(playerAddress)) ?? newPlayerState();
+    // Daily chip top-up happens on the first deal of the day.
+    const key = this.keyFor(playerAddress);
+    const topped = topUpChips(this.players.get(key) ?? newPlayerState(), todayKey());
+    this.players.set(key, topped.state);
+    const state = topped.state;
     return {
       game: gameId,
       roundId,
@@ -248,7 +254,13 @@ export class GameDealer {
       house: this.house,
       jackpotUct: this.pot,
       ...(publicState ? { publicState } : {}),
-      you: { streak: state.streak, best: state.best, daily: dailyView(state, todayKey()) },
+      you: {
+        streak: state.streak,
+        best: state.best,
+        daily: dailyView(state, todayKey()),
+        chips: state.chips,
+        chipsGranted: topped.granted,
+      },
     };
   }
 
@@ -257,10 +269,11 @@ export class GameDealer {
     return { goal: DAILY_GOAL, reward: DAILY_REWARD };
   }
 
-  /** Reveal, judge, and (on a win) pay the player on-chain. */
+  /** Reveal, judge, and settle the bet in chips (jackpots settle on-chain). */
   async play(input: {
     roundId: string;
     choice: unknown;
+    bet?: unknown;
     playerAddress?: string;
     name?: string;
   }): Promise<PlayResult> {
@@ -269,37 +282,43 @@ export class GameDealer {
     const game = GAMES[round.gameId];
     if (!game) throw new Error('Unknown game.');
     const resolved = game.resolveInput(input.choice); // throws on invalid input
+
+    // The bet is staked from the player's chips — validate before the round is spent.
+    const bet = Math.floor(Number(input.bet ?? 1));
+    if (!Number.isFinite(bet) || bet < 1 || bet > 25) throw new Error('Bet must be between 1 and 25 chips.');
+    const key = this.keyFor(input.playerAddress);
+    let state = topUpChips(this.players.get(key) ?? newPlayerState(), todayKey()).state;
+    if (state.chips < bet) {
+      throw new Error(`Not enough chips — you have ${state.chips}. The daily top-up refills to ${DAILY_CHIPS}.`);
+    }
     this.rounds.delete(input.roundId); // one-shot: a commitment is spent once
 
     const judged = game.judge(round.secret, resolved, round.publicState);
     const name = (input.name || input.playerAddress || 'anon').replace(/^@/, '').slice(0, 24);
     if (input.playerAddress) this.lastPlay.set(input.playerAddress, Date.now());
 
-    // Engagement layer: streaks + daily challenge.
-    const key = this.keyFor(input.playerAddress);
-    let state = this.players.get(key) ?? newPlayerState();
+    // Settle the bet by outcome (total-return multipliers) + engagement bonuses.
+    state = { ...state, chips: state.chips - bet };
     let streakBonus = 0;
     let dailyBonus = 0;
+    let reward = 0; // chips credited this round
     if (judged.outcome === 'win') {
       const upd = applyWin(state, todayKey());
       state = upd.state;
       streakBonus = upd.streakBonus;
       dailyBonus = upd.dailyBonus;
-    } else if (judged.outcome === 'lose') {
-      state = applyLoss(state);
+      reward = bet * judged.rewardMult + streakBonus + dailyBonus;
+      state = { ...state, chips: state.chips + reward };
+    } else if (judged.outcome === 'tie') {
+      reward = bet; // push — the bet comes back
+      state = { ...state, chips: state.chips + bet };
+    } else {
+      state = applyLoss(state); // the bet sinks to the house
     }
     this.players.set(key, state);
 
-    const reward = this.baseReward * judged.rewardMult + streakBonus + dailyBonus;
-
-    // Payouts settle on-chain in the background so the reveal is instant;
-    // the client polls the settlement by round id for the tx proof.
-    let settling = false;
-    if (judged.outcome === 'win' && input.playerAddress) {
-      settling = true;
-      this.enqueueSettlement(input.roundId, input.playerAddress, reward, 'arcade-win', name, round.gameId);
-    }
     this.record(name, judged.outcome);
+    if (judged.outcome === 'win') this.creditEarned(name, reward);
     this.roundsPlayed += 1;
 
     // Progressive jackpot — every round rolls for the whole pot, win or lose.
@@ -336,12 +355,12 @@ export class GameDealer {
       roundId: input.roundId,
       outcome: judged.outcome,
       rewardUct: reward,
+      bet,
+      chips: state.chips,
       commit: round.commit,
       secret: round.secret,
       nonce: round.nonce,
       reveal: judged.reveal,
-      paid: false,
-      settling,
       streak: state.streak,
       best: state.best,
       streakBonus,
@@ -349,6 +368,23 @@ export class GameDealer {
       daily: dailyView(state, todayKey()),
       jackpot,
     };
+  }
+
+  /** Cash the player's chips out 1:1 as real UCT, settled on-chain by the house. */
+  cashOut(address: string, name?: string): { settlementId: string; amountUct: number } {
+    const key = this.keyFor(address);
+    const state = this.players.get(key) ?? newPlayerState();
+    const amount = state.chips;
+    if (amount < 5) throw new Error('Cash-out needs at least 5 chips.');
+    this.players.set(key, { ...state, chips: 0 });
+    const cleanName = (name || address).replace(/^@/, '').slice(0, 24);
+    const settlementId = `cashout-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    this.enqueueSettlement(settlementId, address, amount, 'arcade-cashout', cleanName, 'cashout', () => {
+      // failed send → the chips come back
+      const cur = this.players.get(key) ?? newPlayerState();
+      this.players.set(key, { ...cur, chips: cur.chips + amount });
+    });
+    return { settlementId, amountUct: amount };
   }
 
   private keyFor(address?: string): string {
@@ -379,7 +415,6 @@ export class GameDealer {
       treasuryUct: this.treasury,
       paidOutUct: this.paidOut,
       roundsPlayed: this.roundsPlayed,
-      winsPaid: this.winsPaid,
       selfMintedUct: this.minted,
       jackpotUct: this.pot,
       feed: this.feed.slice(0, 12),
@@ -430,6 +465,7 @@ export class GameDealer {
     memo: string,
     name: string,
     game: string,
+    onFail?: () => void,
   ): void {
     this.settlements.set(key, { status: 'pending', amountUct: amount, at: Date.now() });
     const run = (async () => {
@@ -443,19 +479,15 @@ export class GameDealer {
           ...(tx.deliveryState ? { delivery: tx.deliveryState } : {}),
         });
         this.paidOut += amount;
-        if (memo === 'arcade-jackpot') {
-          this.pushEvent({ kind: 'jackpot', at: Date.now(), amountUct: amount, name, game });
-        } else {
-          this.winsPaid += 1;
-          this.pushEvent({ kind: 'win', at: Date.now(), amountUct: amount, name, game });
-        }
-        this.creditEarned(name, amount);
+        const kind = memo === 'arcade-jackpot' ? 'jackpot' : memo === 'arcade-cashout' ? 'cashout' : 'win';
+        this.pushEvent({ kind, at: Date.now(), amountUct: amount, name, game });
       } catch (e) {
         const error = e instanceof Error ? e.message : 'payout failed';
         this.settlements.set(key, { status: 'failed', amountUct: amount, error, at: Date.now() });
         this.log.warn(`settlement ${key} failed: ${error}`);
         // A failed jackpot payout puts the pot back.
         if (memo === 'arcade-jackpot') this.pot = Math.min(this.jackpotCap, this.pot + amount);
+        onFail?.();
       }
       this.pruneSettlements();
     })();

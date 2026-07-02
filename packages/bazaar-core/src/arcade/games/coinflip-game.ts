@@ -4,8 +4,8 @@ import type { Game } from './types.js';
 export const coinGame: Game = {
   id: 'coin',
   title: 'Coin Flip',
-  blurb: 'Call it. The coin is sealed before you choose.',
-  rewardMult: 1,
+  blurb: 'Call it — double or nothing. The coin is sealed before you choose.',
+  rewardMult: 2,
   inputKind: 'choice',
   deal() {
     return { secret: coinFlip() };
@@ -16,6 +16,6 @@ export const coinGame: Game = {
   },
   judge(secret, input) {
     const outcome = input === secret ? 'win' : 'lose';
-    return { outcome, rewardMult: 1, reveal: { result: secret, call: input } };
+    return { outcome, rewardMult: 2, reveal: { result: secret, call: input } };
   },
 };

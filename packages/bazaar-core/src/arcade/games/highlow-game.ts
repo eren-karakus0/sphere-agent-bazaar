@@ -9,7 +9,7 @@ export const highlowGame: Game = {
   id: 'highlow',
   title: 'High · Low',
   blurb: 'A card is shown. Is the sealed next card higher or lower?',
-  rewardMult: 1,
+  rewardMult: 2,
   inputKind: 'choice',
   deal() {
     const current = cardRank();
@@ -25,6 +25,6 @@ export const highlowGame: Game = {
     if (next === current) return { outcome: 'tie', rewardMult: 1, reveal: { current, next } };
     const isHigher = next > current;
     const win = (input === 'higher' && isHigher) || (input === 'lower' && !isHigher);
-    return { outcome: win ? 'win' : 'lose', rewardMult: 1, reveal: { current, next } };
+    return { outcome: win ? 'win' : 'lose', rewardMult: 2, reveal: { current, next } };
   },
 };

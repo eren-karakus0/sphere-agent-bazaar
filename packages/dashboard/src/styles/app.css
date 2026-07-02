@@ -606,17 +606,87 @@
   letter-spacing: 0.04em;
 }
 
-/* ---------------- Engagement (streak + daily) ---------------- */
+/* ---------------- Engagement (chips + streak + daily) ---------------- */
 .events {
   display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 18px;
+  grid-template-columns: auto auto 1fr;
+  gap: 20px;
   align-items: center;
   padding: 12px 16px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--bg-elevated);
 }
+.events__chips {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-right: 18px;
+  border-right: 1px solid var(--border);
+}
+.events__chips-top { display: flex; align-items: baseline; gap: 6px; }
+.events__chips-n {
+  font-family: var(--font-display);
+  font-size: 24px;
+  color: var(--accent);
+  line-height: 1;
+}
+.events__chips-l {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.cashout {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  background: rgba(255, 111, 0, 0.08);
+  border: 1px solid var(--border-focus);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+.cashout:hover:not(:disabled) { border-color: var(--accent); background: rgba(255, 111, 0, 0.14); }
+.cashout:disabled { opacity: 0.45; cursor: default; }
+.events__cash { font-family: var(--font-mono); font-size: 10px; }
+.events__cash--ok { color: var(--risk-low); }
+.events__cash--bad { color: var(--risk-medium); }
+
+/* bet picker */
+.betbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.betbar__label,
+.betbar__unit { letter-spacing: 0.18em; text-transform: uppercase; }
+.betbtn {
+  min-width: 36px;
+  padding: 6px 0;
+  font-family: var(--font-display);
+  font-size: 15px;
+  color: var(--text-secondary);
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, transform 0.12s;
+}
+.betbtn:hover:not(:disabled) { border-color: var(--border-focus); transform: translateY(-1px); }
+.betbtn--on {
+  color: #0a0a0a;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.betbtn:disabled { opacity: 0.35; cursor: default; }
+.betbar__empty { color: var(--risk-medium); letter-spacing: 0.02em; }
 .events__streak { display: flex; align-items: center; gap: 8px; }
 .events__streak-n { font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
 .events__best { font-family: var(--font-mono); font-size: 10px; color: var(--text-faint); }
@@ -647,6 +717,7 @@
 .bonusline { font-family: var(--font-mono); font-size: 11px; color: var(--accent); }
 @media (max-width: 560px) {
   .events { grid-template-columns: 1fr; }
+  .events__chips { border-right: none; padding-right: 0; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
 }
 .commit--wait .dot,
 .pay .dot {

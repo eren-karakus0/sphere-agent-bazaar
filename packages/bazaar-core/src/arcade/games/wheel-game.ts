@@ -9,12 +9,12 @@ import type { Game } from './types.js';
  * The layout is public up front (in `publicState`), and the reveal repeats it
  * so the browser can redraw + re-derive the landing independently.
  */
-export const WHEEL_SEGMENTS: readonly number[] = [0, 1, 0, 2, 0, 1, 0, 2, 0, 5];
+export const WHEEL_SEGMENTS: readonly number[] = [0, 1, 0, 1, 0, 2, 0, 1, 0, 1, 0, 5];
 
 export const wheelGame: Game = {
   id: 'wheel',
   title: 'Lucky Wheel',
-  blurb: 'Spin — land a multiplier. ×5 jackpot, two-seed fair.',
+  blurb: 'Spin for a bet multiplier — ×1 gives the bet back, ×5 tops the wheel.',
   rewardMult: 5, // display: the top multiplier (actual comes from judge)
   inputKind: 'seed',
   deal() {
@@ -29,7 +29,8 @@ export const wheelGame: Game = {
     const index = deriveWheelIndex(secret, input as string, WHEEL_SEGMENTS.length);
     const multiplier = WHEEL_SEGMENTS[index]!;
     return {
-      outcome: multiplier > 0 ? 'win' : 'lose',
+      // total-return: ×1 pushes the bet back, above 1 wins, 0 loses it
+      outcome: multiplier > 1 ? 'win' : multiplier === 1 ? 'tie' : 'lose',
       rewardMult: multiplier,
       reveal: {
         segmentIndex: index,

@@ -25,6 +25,10 @@ export interface PlayerSnapshot {
   streak: number;
   best: number;
   daily: DailyView;
+  /** Chip balance (bets stake it; cash-out pays it 1:1 in UCT). */
+  chips: number;
+  /** Chips granted by today's top-up in this call. */
+  chipsGranted: number;
 }
 
 export interface NewRound {
@@ -59,13 +63,10 @@ export interface PlayResult {
   secret: string;
   nonce: string;
   reveal: Record<string, unknown>;
-  paid: boolean;
-  /** True when a payout was queued and is settling on-chain in the background. */
-  settling?: boolean;
-  payoutError?: string;
-  txId?: string;
-  txRef?: string;
-  delivery?: string;
+  /** The chips staked on this round. */
+  bet: number;
+  /** The player's chip balance after the round. */
+  chips: number;
   streak: number;
   best: number;
   streakBonus: number;
@@ -84,7 +85,7 @@ export interface LeaderRow {
 }
 
 export interface HouseEvent {
-  kind: 'win' | 'mint' | 'jackpot';
+  kind: 'win' | 'mint' | 'jackpot' | 'cashout';
   at: number;
   amountUct: number;
   name?: string;
@@ -95,7 +96,6 @@ export interface HouseStats {
   treasuryUct: number | null;
   paidOutUct: number;
   roundsPlayed: number;
-  winsPaid: number;
   selfMintedUct: number;
   jackpotUct?: number;
   feed: HouseEvent[];
@@ -133,15 +133,22 @@ export function playRound(input: {
   game: string;
   roundId: string;
   choice: unknown;
+  bet: number;
   address?: string;
   name?: string;
 }): Promise<PlayResult> {
   return post<PlayResult>('/api/arcade/play', {
     roundId: input.roundId,
     choice: input.choice,
+    bet: input.bet,
     address: input.address,
     name: input.name,
   });
+}
+
+/** Cash the connected wallet's chips out 1:1 as UCT, settled on-chain by the house. */
+export function cashOut(address: string, name?: string): Promise<{ settlementId: string; amountUct: number }> {
+  return post<{ settlementId: string; amountUct: number }>('/api/arcade/cashout', { address, name });
 }
 
 export async function fetchLeaderboard(): Promise<Leaderboard> {

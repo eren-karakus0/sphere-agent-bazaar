@@ -141,12 +141,31 @@ const server = http.createServer((req, res) => {
         const result = await dealer!.play({
           roundId: String(body.roundId ?? ''),
           choice: body.choice,
+          bet: body.bet,
           playerAddress: typeof body.address === 'string' ? body.address : undefined,
           name: typeof body.name === 'string' ? body.name : undefined,
         });
         json(res, 200, result);
       } catch (e) {
         json(res, 400, { error: e instanceof Error ? e.message : 'play failed' });
+      }
+    });
+    return;
+  }
+
+  // Cash the caller's chips out as real UCT, settled on-chain by the house.
+  if (pathname === '/api/arcade/cashout' && req.method === 'POST') {
+    if (!dealer) {
+      json(res, 503, { error: 'The arcade dealer is still waking up — try again in a few seconds.' });
+      return;
+    }
+    void readJson(req).then((body) => {
+      try {
+        const address = typeof body.address === 'string' ? body.address : '';
+        if (!address) throw new Error('Connect a wallet to cash out.');
+        json(res, 200, dealer!.cashOut(address, typeof body.name === 'string' ? body.name : undefined));
+      } catch (e) {
+        json(res, 400, { error: e instanceof Error ? e.message : 'cash-out failed' });
       }
     });
     return;

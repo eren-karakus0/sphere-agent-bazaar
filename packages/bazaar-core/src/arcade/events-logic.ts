@@ -8,13 +8,31 @@ export interface PlayerState {
   dailyDay: string; // UTC YYYY-MM-DD the daily counters belong to
   dailyWins: number;
   dailyClaimed: boolean;
+  /** Chip balance — bets are staked from it; cash-out settles it on-chain 1:1. */
+  chips: number;
+  /** UTC day the last daily chip top-up was applied. */
+  chipsDay: string;
 }
 
 export const DAILY_GOAL = 5;
 export const DAILY_REWARD = 10;
+export const DAILY_CHIPS = 25;
 
 export function newPlayerState(): PlayerState {
-  return { streak: 0, best: 0, dailyDay: '', dailyWins: 0, dailyClaimed: false };
+  return { streak: 0, best: 0, dailyDay: '', dailyWins: 0, dailyClaimed: false, chips: 0, chipsDay: '' };
+}
+
+/**
+ * Once per UTC day, top a player's chips up to the daily floor. Balances above
+ * the floor are untouched — the house never drips chips onto a full stack.
+ */
+export function topUpChips(prev: PlayerState, day: string, floor: number = DAILY_CHIPS): {
+  state: PlayerState;
+  granted: number;
+} {
+  if (prev.chipsDay === day) return { state: prev, granted: 0 };
+  const chips = Math.max(prev.chips, floor);
+  return { state: { ...prev, chips, chipsDay: day }, granted: chips - prev.chips };
 }
 
 export function todayKey(now: number = Date.now()): string {

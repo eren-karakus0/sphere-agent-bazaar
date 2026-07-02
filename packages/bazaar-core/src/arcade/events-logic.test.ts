@@ -7,6 +7,8 @@ import {
   DAILY_REWARD,
   newPlayerState,
   streakBonus,
+  topUpChips,
+  DAILY_CHIPS,
 } from './events-logic.js';
 
 describe('streak bonus', () => {
@@ -61,5 +63,30 @@ describe('applyWin / applyLoss', () => {
     let s = newPlayerState();
     s = applyWin(s, '2026-07-01').state;
     expect(dailyView(s, '2026-07-02')).toEqual({ goal: DAILY_GOAL, wins: 0, claimed: false });
+  });
+});
+
+describe('daily chip top-up', () => {
+  it('tops a fresh player up to the floor, once per day', () => {
+    const day = '2026-07-02';
+    const first = topUpChips(newPlayerState(), day);
+    expect(first.state.chips).toBe(DAILY_CHIPS);
+    expect(first.granted).toBe(DAILY_CHIPS);
+    const again = topUpChips(first.state, day);
+    expect(again.granted).toBe(0);
+  });
+
+  it('never drips onto a stack already above the floor', () => {
+    const rich = { ...newPlayerState(), chips: 90, chipsDay: '2026-07-01' };
+    const t = topUpChips(rich, '2026-07-02');
+    expect(t.state.chips).toBe(90);
+    expect(t.granted).toBe(0);
+  });
+
+  it('refills a busted stack on the next day', () => {
+    const busted = { ...newPlayerState(), chips: 3, chipsDay: '2026-07-01' };
+    const t = topUpChips(busted, '2026-07-02');
+    expect(t.state.chips).toBe(DAILY_CHIPS);
+    expect(t.granted).toBe(DAILY_CHIPS - 3);
   });
 });

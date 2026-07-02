@@ -35,7 +35,8 @@ export const plinkoGame: Game = {
     const bucketIndex = path.reduce((a, b) => a + b, 0);
     const multiplier = PLINKO_MULTIPLIERS[bucketIndex]!;
     return {
-      outcome: multiplier > 0 ? 'win' : 'lose',
+      // total-return: ×1 pushes the bet back, above 1 wins, 0 loses it
+      outcome: multiplier > 1 ? 'win' : multiplier === 1 ? 'tie' : 'lose',
       rewardMult: multiplier,
       reveal: {
         path,
