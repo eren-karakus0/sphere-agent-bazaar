@@ -60,6 +60,8 @@ export interface PlayResult {
   nonce: string;
   reveal: Record<string, unknown>;
   paid: boolean;
+  /** True when a payout was queued and is settling on-chain in the background. */
+  settling?: boolean;
   payoutError?: string;
   txId?: string;
   txRef?: string;
@@ -145,6 +147,26 @@ export function playRound(input: {
 export async function fetchLeaderboard(): Promise<Leaderboard> {
   const r = await fetch(`${BACKEND_URL}/api/arcade/leaderboard`, { signal: AbortSignal.timeout(8_000) });
   return (await r.json()) as Leaderboard;
+}
+
+/** Background on-chain payout state for a round (win + jackpot legs). */
+export interface SettlementView {
+  status: 'pending' | 'landed' | 'failed';
+  amountUct: number;
+  txId?: string;
+  delivery?: string;
+  error?: string;
+}
+export interface RoundSettlement {
+  win?: SettlementView;
+  jackpot?: SettlementView;
+}
+
+export async function fetchSettlement(roundId: string): Promise<RoundSettlement> {
+  const r = await fetch(`${BACKEND_URL}/api/arcade/settlement?round=${encodeURIComponent(roundId)}`, {
+    signal: AbortSignal.timeout(8_000),
+  });
+  return (await r.json()) as RoundSettlement;
 }
 
 async function sha256Hex(s: string): Promise<string> {

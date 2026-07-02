@@ -161,12 +161,39 @@ describe('progressive jackpot', () => {
     expect(nr.jackpotUct).toBe(20);
     const res = await dealer.play({ roundId: nr.roundId, choice: 'heads', playerAddress: '@p1', name: 'p1' });
     expect(res.jackpot.hit).toBe(true);
-    expect(res.jackpot.paid).toBe(true);
     expect(res.jackpot.potUct).toBe(20);
+    await dealer.flushPayouts(); // the payout settles in the background
+    const settlement = dealer.settlementFor(nr.roundId);
+    expect(settlement.jackpot?.status).toBe('landed');
+    expect(settlement.jackpot?.txId).toBeTruthy();
     expect(sent.some((s) => s.memo === 'arcade-jackpot' && s.amount === 20)).toBe(true);
     const stats = await dealer.houseStats();
     expect(stats.jackpotUct).toBe(20); // reset to seed
     expect(stats.feed.some((e) => e.kind === 'jackpot')).toBe(true);
+  });
+
+  it('reveals instantly: a win is settling, then lands with a tx id', async () => {
+    const sent: { address: string; amount: number; memo?: string }[] = [];
+    const dealer = new GameDealer({
+      agent: stubAgent(sent),
+      cooldownMs: 0,
+      jackpotOdds: 1_000_000_000,
+    });
+    // brute a guaranteed win: coin judge('heads','heads') — deal until secret is heads
+    let res;
+    for (let i = 0; i < 40 && !res; i++) {
+      const nr = dealer.newRound('coin', '@p1');
+      const r = await dealer.play({ roundId: nr.roundId, choice: 'heads', playerAddress: '@p1', name: 'p1' });
+      if (r.outcome === 'win') res = { r, roundId: nr.roundId };
+    }
+    expect(res).toBeTruthy();
+    expect(res!.r.paid).toBe(false); // not settled yet at reveal time
+    expect(res!.r.settling).toBe(true);
+    await dealer.flushPayouts();
+    const s = dealer.settlementFor(res!.roundId);
+    expect(s.win?.status).toBe('landed');
+    expect(s.win?.txId).toBeTruthy();
+    expect(sent.some((m) => m.memo === 'arcade-win')).toBe(true);
   });
 
   it('grows the pot (capped) when the roll misses', async () => {

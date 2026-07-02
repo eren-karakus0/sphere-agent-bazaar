@@ -75,7 +75,8 @@ function readJson(req: http.IncomingMessage): Promise<Record<string, unknown>> {
 
 const server = http.createServer((req, res) => {
   setCors(res);
-  const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
+  const url = new URL(req.url ?? '/', 'http://localhost');
+  const pathname = url.pathname;
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204).end();
@@ -103,6 +104,13 @@ const server = http.createServer((req, res) => {
         houseStats,
       });
     });
+    return;
+  }
+
+  // Background payout status for a round (win + jackpot legs).
+  if (pathname === '/api/arcade/settlement') {
+    const round = url.searchParams.get('round') ?? '';
+    json(res, 200, dealer && round ? dealer.settlementFor(round) : {});
     return;
   }
 

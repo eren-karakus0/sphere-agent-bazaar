@@ -94,6 +94,8 @@ export interface PlayResult {
   nonce: string;
   reveal: Record<string, unknown>;
   paid: boolean;
+  /** True when a payout was queued and is settling on-chain in the background. */
+  settling?: boolean;
   payoutError?: string;
   txId?: string;
   txRef?: string;
@@ -105,6 +107,16 @@ export interface PlayResult {
   dailyBonus: number;
   daily: DailyView;
   jackpot: JackpotResult;
+}
+
+/** Background on-chain payout state, pollable per round. */
+export interface Settlement {
+  status: 'pending' | 'landed' | 'failed';
+  amountUct: number;
+  txId?: string;
+  delivery?: string;
+  error?: string;
+  at: number;
 }
 
 export interface LeaderRow {
@@ -181,6 +193,8 @@ export class GameDealer {
   private treasury: number | null = null;
   private treasuryAt = 0;
   private pot: number;
+  private readonly settlements = new Map<string, Settlement>();
+  private readonly inFlight = new Set<Promise<void>>();
 
   constructor(opts: GameDealerOptions) {
     this.agent = opts.agent;
@@ -278,25 +292,15 @@ export class GameDealer {
 
     const reward = this.baseReward * judged.rewardMult + streakBonus + dailyBonus;
 
-    let paid = false;
-    let payoutError: string | undefined;
-    let tx: TxLike | undefined;
+    // Payouts settle on-chain in the background so the reveal is instant;
+    // the client polls the settlement by round id for the tx proof.
+    let settling = false;
     if (judged.outcome === 'win' && input.playerAddress) {
-      try {
-        tx = await this.payout(input.playerAddress, reward);
-        paid = true;
-      } catch (e) {
-        payoutError = e instanceof Error ? e.message : 'payout failed';
-        this.log.warn(`payout to ${input.playerAddress.slice(0, 16)}… failed: ${payoutError}`);
-      }
+      settling = true;
+      this.enqueueSettlement(input.roundId, input.playerAddress, reward, 'arcade-win', name, round.gameId);
     }
-    this.record(name, judged.outcome, paid ? reward : 0);
+    this.record(name, judged.outcome);
     this.roundsPlayed += 1;
-    if (paid) {
-      this.paidOut += reward;
-      this.winsPaid += 1;
-      this.pushEvent({ kind: 'win', at: Date.now(), amountUct: reward, name, game: round.gameId });
-    }
 
     // Progressive jackpot — every round rolls for the whole pot, win or lose.
     // The roll derives from the committed secret + the player's input, so it is
@@ -311,22 +315,16 @@ export class GameDealer {
       input: jackpotInput,
     };
     if (jackpot.hit && input.playerAddress) {
-      try {
-        const jtx = await this.payout(input.playerAddress, jackpot.potUct, 'arcade-jackpot');
-        jackpot = {
-          ...jackpot,
-          paid: true,
-          ...(jtx.id ? { txId: jtx.id } : {}),
-          ...(jtx.deliveryState ? { delivery: jtx.deliveryState } : {}),
-        };
-        this.paidOut += jackpot.potUct;
-        this.pushEvent({ kind: 'jackpot', at: Date.now(), amountUct: jackpot.potUct, name, game: round.gameId });
-        this.log.info(`JACKPOT — @${name} hit the ${jackpot.potUct} UCT pot`);
-        this.pot = this.jackpotSeed;
-      } catch (e) {
-        jackpot = { ...jackpot, paid: false, error: e instanceof Error ? e.message : 'jackpot payout failed' };
-        this.log.warn(`jackpot payout failed: ${jackpot.error}`);
-      }
+      this.log.info(`JACKPOT — @${name} hit the ${jackpot.potUct} UCT pot`);
+      this.enqueueSettlement(
+        `${input.roundId}:jackpot`,
+        input.playerAddress,
+        jackpot.potUct,
+        'arcade-jackpot',
+        name,
+        round.gameId,
+      );
+      this.pot = this.jackpotSeed; // optimistic — restored if the payout fails
     } else if (jackpot.hit) {
       jackpot = { ...jackpot, paid: false, error: 'no wallet address to pay' };
     } else {
@@ -342,11 +340,8 @@ export class GameDealer {
       secret: round.secret,
       nonce: round.nonce,
       reveal: judged.reveal,
-      paid,
-      ...(payoutError ? { payoutError } : {}),
-      ...(tx?.id ? { txId: tx.id } : {}),
-      ...(tx?.tokenTransfers?.[0]?.requestIdHex ? { txRef: tx.tokenTransfers[0].requestIdHex } : {}),
-      ...(tx?.deliveryState ? { delivery: tx.deliveryState } : {}),
+      paid: false,
+      settling,
       streak: state.streak,
       best: state.best,
       streakBonus,
@@ -406,14 +401,90 @@ export class GameDealer {
     return run;
   }
 
-  private record(name: string, outcome: Outcome, earned: number): void {
+  private record(name: string, outcome: Outcome): void {
     const row = this.board.get(name) ?? { name, wins: 0, losses: 0, ties: 0, played: 0, earnedUct: 0 };
     row.played += 1;
     if (outcome === 'win') row.wins += 1;
     else if (outcome === 'lose') row.losses += 1;
     else row.ties += 1;
-    row.earnedUct += earned;
     this.board.set(name, row);
+  }
+
+  private creditEarned(name: string, amount: number): void {
+    const row = this.board.get(name);
+    if (row) {
+      row.earnedUct += amount;
+      this.board.set(name, row);
+    }
+  }
+
+  /**
+   * Queue an on-chain payout and expose its progress via settlementFor().
+   * Totals, feed events and leaderboard earnings only move once the transfer
+   * really lands — no cosmetic numbers.
+   */
+  private enqueueSettlement(
+    key: string,
+    address: string,
+    amount: number,
+    memo: string,
+    name: string,
+    game: string,
+  ): void {
+    this.settlements.set(key, { status: 'pending', amountUct: amount, at: Date.now() });
+    const run = (async () => {
+      try {
+        const tx = await this.payout(address, amount, memo);
+        this.settlements.set(key, {
+          status: 'landed',
+          amountUct: amount,
+          at: Date.now(),
+          ...(tx.id ? { txId: tx.id } : {}),
+          ...(tx.deliveryState ? { delivery: tx.deliveryState } : {}),
+        });
+        this.paidOut += amount;
+        if (memo === 'arcade-jackpot') {
+          this.pushEvent({ kind: 'jackpot', at: Date.now(), amountUct: amount, name, game });
+        } else {
+          this.winsPaid += 1;
+          this.pushEvent({ kind: 'win', at: Date.now(), amountUct: amount, name, game });
+        }
+        this.creditEarned(name, amount);
+      } catch (e) {
+        const error = e instanceof Error ? e.message : 'payout failed';
+        this.settlements.set(key, { status: 'failed', amountUct: amount, error, at: Date.now() });
+        this.log.warn(`settlement ${key} failed: ${error}`);
+        // A failed jackpot payout puts the pot back.
+        if (memo === 'arcade-jackpot') this.pot = Math.min(this.jackpotCap, this.pot + amount);
+      }
+      this.pruneSettlements();
+    })();
+    this.inFlight.add(run);
+    void run.finally(() => this.inFlight.delete(run));
+  }
+
+  /** A round's background payout state (win payout + jackpot payout, if any). */
+  settlementFor(roundId: string): { win?: Settlement; jackpot?: Settlement } {
+    const win = this.settlements.get(roundId);
+    const jackpot = this.settlements.get(`${roundId}:jackpot`);
+    return { ...(win ? { win } : {}), ...(jackpot ? { jackpot } : {}) };
+  }
+
+  /** Wait for every queued payout to finish (used by tests). */
+  async flushPayouts(): Promise<void> {
+    while (this.inFlight.size > 0) await Promise.allSettled([...this.inFlight]);
+  }
+
+  private pruneSettlements(): void {
+    const cutoff = Date.now() - 10 * 60_000;
+    for (const [k, s] of this.settlements) {
+      if (s.at < cutoff) this.settlements.delete(k);
+    }
+    while (this.settlements.size > 400) {
+      const oldest = this.settlements.keys().next().value as string | undefined;
+      if (oldest === undefined) break;
+      this.settlements.delete(oldest);
+    }
   }
 
   private sweep(): void {

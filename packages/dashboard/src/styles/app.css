@@ -648,7 +648,8 @@
 @media (max-width: 560px) {
   .events { grid-template-columns: 1fr; }
 }
-.commit--wait .dot {
+.commit--wait .dot,
+.pay .dot {
   display: inline-block;
   width: 8px;
   height: 8px;

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useWalletCtx } from './WalletContext';
 import {
   fetchLeaderboard,
+  fetchSettlement,
   hasBackend,
   makeClientSeed,
   newRound,
@@ -18,6 +19,7 @@ import {
   type NewRound,
   type PlayerSnapshot,
   type PlayResult,
+  type RoundSettlement,
 } from './lib/arcade';
 import { GAME_UI, GAMES_META } from './arcade/games-ui';
 import { BotMark, Flame } from './arcade/art';
@@ -55,6 +57,8 @@ export function Arcade() {
   const [baseReward, setBaseReward] = useState(1);
   const [you, setYou] = useState<PlayerSnapshot | null>(null);
   const [dailyDef, setDailyDef] = useState<{ goal: number; reward: number } | null>(null);
+  // The round's background on-chain payout (win/jackpot), polled until it lands.
+  const [stl, setStl] = useState<RoundSettlement | null>(null);
   // Holds the verdict while a reveal animation (e.g. the wheel) lands.
   const [settling, setSettling] = useState(false);
   const settleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -116,6 +120,41 @@ export function Arcade() {
     const t = setInterval(refreshBoard, 15_000);
     return () => clearInterval(t);
   }, [connected, ready, refreshBoard]);
+
+  // Poll the background payout until it lands (or fails) on-chain.
+  useEffect(() => {
+    if (!result) {
+      setStl(null);
+      return;
+    }
+    const needWin = !!result.settling;
+    const needJackpot = !!result.jackpot?.hit;
+    if (!needWin && !needJackpot) return;
+    let alive = true;
+    let tries = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      tries += 1;
+      let done = false;
+      try {
+        const s = await fetchSettlement(result.roundId);
+        if (!alive) return;
+        setStl(s);
+        const winDone = !needWin || (s.win !== undefined && s.win.status !== 'pending');
+        const jackpotDone = !needJackpot || (s.jackpot !== undefined && s.jackpot.status !== 'pending');
+        done = winDone && jackpotDone;
+        if (done) refreshBoard();
+      } catch {
+        /* transient — keep polling */
+      }
+      if (alive && !done && tries < 20) timer = setTimeout(poll, 1300);
+    };
+    timer = setTimeout(poll, 800);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [result, refreshBoard]);
 
   const deal = useCallback(
     async (gameId: string) => {
@@ -306,8 +345,7 @@ export function Arcade() {
           <>
             {status === 'playing' || settling ? (
               <div className="commit commit--wait">
-                <span className="dot" />{' '}
-                {settling ? 'watch it land…' : 'revealing & settling any payout on-chain…'}
+                <span className="dot" /> {settling ? 'watch it land…' : 'revealing…'}
               </div>
             ) : round ? (
               <div className="commit">
@@ -359,9 +397,11 @@ export function Arcade() {
                 <div className="jackpotwin__title">JACKPOT</div>
                 <div className="jackpotwin__amount">+{result.jackpot.potUct} UCT</div>
                 <div className="jackpotwin__pay">
-                  {result.jackpot.paid
-                    ? 'the whole pot — sent to your wallet by the house agent'
-                    : 'pot payout hit a testnet hiccup'}
+                  {stl?.jackpot?.status === 'landed'
+                    ? 'the whole pot — sent to your wallet by the house agent ✓'
+                    : stl?.jackpot?.status === 'failed'
+                      ? 'pot payout hit a testnet hiccup'
+                      : 'the house agent is sending you the pot…'}
                 </div>
               </div>
             )}
@@ -370,11 +410,15 @@ export function Arcade() {
             </div>
             <div className="outcome__pay">
               {outcome === 'win' ? (
-                result.paid ? (
+                stl?.win?.status === 'landed' ? (
                   <span className="pay pay--ok">✓ {result.rewardUct} UCT sent to your wallet</span>
-                ) : (
-                  <span className="pay pay--pend" title={result.payoutError}>
+                ) : stl?.win?.status === 'failed' ? (
+                  <span className="pay pay--pend" title={stl.win.error}>
                     the payout hit a testnet hiccup and didn&apos;t go through — your win still counts on the board
+                  </span>
+                ) : (
+                  <span className="pay pay--pend">
+                    <span className="dot" /> paying you on-chain…
                   </span>
                 )
               ) : outcome === 'tie' ? (
@@ -391,8 +435,8 @@ export function Arcade() {
                 {result.dailyBonus > 0 ? ` daily bonus +${result.dailyBonus}` : ''} UCT
               </div>
             )}
-            {outcome === 'win' && result.paid && result.txId && (
-              <TxProof id={result.txId} delivery={result.delivery} />
+            {outcome === 'win' && stl?.win?.status === 'landed' && stl.win.txId && (
+              <TxProof id={stl.win.txId} delivery={stl.win.delivery} />
             )}
             <div className="outcome__verify">
               {verified === null ? (
@@ -500,9 +544,9 @@ function HousePanel({
         <span className="housep__tag">{house ? `@${house}` : '…'}</span>
       </div>
       <div className="housep__grid">
-        <Stat value={stats.treasuryUct === null ? '…' : `${stats.treasuryUct} UCT`} label="treasury, live" />
         <Stat value={`${stats.paidOutUct} UCT`} label="paid to players" />
         <Stat value={String(stats.roundsPlayed)} label="rounds dealt" />
+        <Stat value={stats.jackpotUct != null ? `${stats.jackpotUct} UCT` : '…'} label="jackpot pot" />
         <Stat value={`${stats.selfMintedUct} UCT`} label="self-funded" />
       </div>
       {stats.feed.length > 0 && (
@@ -525,7 +569,7 @@ function HousePanel({
         </div>
       )}
       <div className="housep__note">
-        every number is real — balance read live from the house wallet, payouts settled on testnet2 · recent totals
+        every number is real — payouts settled on testnet2 by the agent itself · recent totals
       </div>
     </div>
   );
