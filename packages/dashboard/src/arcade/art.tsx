@@ -243,6 +243,17 @@ export function WheelFace({ segments = DEFAULT_WHEEL, size = 64 }: { segments?: 
   );
 }
 
+export function LockMark({ size = 38 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 40 40" fill="none" role="img" aria-label="locked">
+      <path d="M13 18v-5a7 7 0 0 1 14 0v5" stroke="#FFD9A8" strokeWidth="3" />
+      <rect x="9" y="18" width="22" height="15" rx="3" fill="#FFD9A8" />
+      <circle cx="20" cy="24.5" r="2.1" fill={INK} />
+      <rect x="19" y="25.5" width="2" height="4" rx="1" fill={INK} />
+    </svg>
+  );
+}
+
 export function PlinkoMark({ size = 64 }: { size?: number }) {
   const pegs: [number, number][] = [
     [32, 26],

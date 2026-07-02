@@ -23,7 +23,7 @@ import {
   type RoundSettlement,
 } from './lib/arcade';
 import { GAME_UI, GAMES_META } from './arcade/games-ui';
-import { BotMark, Flame } from './arcade/art';
+import { BotMark, Flame, LockMark, WheelFace } from './arcade/art';
 import { WinBurst } from './arcade/fx';
 import { sfx } from './arcade/sound';
 
@@ -135,6 +135,15 @@ export function Arcade() {
     const t = setInterval(refreshBoard, 15_000);
     return () => clearInterval(t);
   }, [connected, ready, refreshBoard]);
+
+  // Locked landing: tease the REAL floor behind the glass (live pot + payout
+  // feed) — and warm the dealer up before the player even connects.
+  useEffect(() => {
+    if (connected) return;
+    refreshBoard();
+    const t = setInterval(refreshBoard, 30_000);
+    return () => clearInterval(t);
+  }, [connected, refreshBoard]);
 
   // Poll the jackpot's background on-chain payout until it lands (or fails).
   useEffect(() => {
@@ -367,17 +376,55 @@ export function Arcade() {
   if (!connected) {
     return (
       <section className="arcade">
-        <Hero house={house} />
-        <div className="empty empty--locked">
-          <div className="empty__lock">🔒</div>
-          <div>Connect your Unicity wallet to play and get paid.</div>
-          <button
-            className="empty__connect"
-            onClick={() => void wallet.connect()}
-            disabled={wallet.status === 'connecting'}
-          >
-            {wallet.status === 'connecting' ? 'Connecting…' : 'Connect Wallet'}
-          </button>
+        <div className="lockedfloor">
+          {/* the real floor, blurred behind the glass */}
+          <div className="floorback" aria-hidden="true">
+            <div className="floorback__jpot">
+              <JackpotSign pot={pot} />
+            </div>
+            <div className="floorback__wheel">
+              <WheelFace size={290} />
+            </div>
+            <div className="floorback__stack">
+              <div className="ghostrow ghostrow--hot" />
+              <div className="ghostrow" />
+              <div className="ghostrow" />
+              <div className="ghostrow" />
+            </div>
+            <div className="floorback__tiles">
+              <div className="ghosttile" />
+              <div className="ghosttile" />
+              <div className="ghosttile" />
+              <div className="ghosttile" />
+            </div>
+          </div>
+          <div className="floorscrim" aria-hidden="true" />
+
+          <HouseTicker feed={houseStats?.feed ?? []} games={games} />
+
+          <div className="lockbox">
+            <div className="lockbox__tile">
+              <LockMark size={38} />
+            </div>
+            <div className="lockbox__kicker">members only · testnet2</div>
+            <h2 className="lockbox__title">
+              Step up to
+              <br />
+              <em>the floor</em>
+            </h2>
+            <p className="lockbox__lede">
+              Your wallet is your seat. Connect to claim <b>25 free chips</b>, play 7 provably-fair
+              games, and cash winnings out as real on-chain UCT.
+            </p>
+            <button
+              className="lockbox__cta"
+              onClick={() => void wallet.connect()}
+              disabled={wallet.status === 'connecting'}
+            >
+              {wallet.status === 'connecting' ? 'CONNECTING…' : 'CONNECT WALLET →'}
+            </button>
+            <div className="lockbox__foot">no signup · no human in the loop · the agent pays you</div>
+          </div>
         </div>
       </section>
     );
@@ -391,13 +438,7 @@ export function Arcade() {
 
       <EventsBar you={you} dailyDef={dailyDef} cash={cash} onCashOut={() => void startCashOut()} />
 
-      {pot != null && (
-        <div className="jpot" title="Grows every round; a provably-fair roll can hit it in any game — the house agent pays the whole pot on-chain.">
-          <span className="jpot__label">progressive jackpot</span>
-          <span className="jpot__amount">{pot} UCT</span>
-          <span className="jpot__hint">every round rolls for it — any game</span>
-        </div>
-      )}
+      {pot != null && <JackpotSign pot={pot} />}
 
       <HouseTicker feed={houseStats?.feed ?? []} games={games} />
 
@@ -598,6 +639,34 @@ export function Arcade() {
 
       <HousePanel stats={houseStats} house={house} games={games} />
     </section>
+  );
+}
+
+/** The bulb-marquee jackpot sign — chasing incandescent border, glowing amount. */
+function JackpotSign({ pot }: { pot: number | null }) {
+  return (
+    <div
+      className="jpot"
+      title="Grows every round; a provably-fair roll can hit it in any game — the house agent pays the whole pot on-chain."
+    >
+      <span className="jpot__bulbs jpot__bulbs--top" aria-hidden="true" />
+      <span className="jpot__bulbs jpot__bulbs--bottom" aria-hidden="true" />
+      <span className="jpot__label">
+        progressive
+        <br />
+        jackpot
+      </span>
+      <span className="jpot__amount">
+        {pot ?? '…'}
+        <em> UCT</em>
+      </span>
+      <span className="jpot__hint">
+        every round
+        <br />
+        rolls for it
+        <br />— any game
+      </span>
+    </div>
   );
 }
 

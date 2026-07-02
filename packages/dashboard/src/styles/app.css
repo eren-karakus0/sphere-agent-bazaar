@@ -199,37 +199,177 @@
 }
 .wallet__x:hover { color: var(--accent); }
 
-/* locked (wallet not connected) */
-.empty--locked {
+/* ============================================================
+   Locked landing — the live floor teases behind a dimmed lock
+   (design pick 1a: "through the glass")
+   ============================================================ */
+.lockedfloor {
+  position: relative;
+  min-height: clamp(560px, 78vh, 760px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background:
+    radial-gradient(130% 90% at 50% -8%, rgba(255, 111, 0, 0.13), transparent 58%),
+    #060606;
+}
+/* the real floor, blurred + dimmed behind the glass */
+.floorback {
+  position: absolute;
+  inset: 0;
+  filter: blur(3px) brightness(0.55) saturate(0.85);
+  opacity: 0.9;
+  pointer-events: none;
+}
+.floorback__jpot {
+  position: absolute;
+  top: 92px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(560px, 86%);
+}
+.floorback__wheel {
+  position: absolute;
+  top: 240px;
+  left: clamp(-70px, 13%, 210px);
+  width: 290px;
+  height: 290px;
+  animation: wheel-turn 9s linear infinite;
+}
+.floorback__stack {
+  position: absolute;
+  top: 250px;
+  right: clamp(-40px, 11%, 175px);
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: 12px;
+  width: min(320px, 36%);
+}
+.ghostrow {
+  height: 64px;
+  border-radius: 10px;
+  background: #0f0f0f;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.ghostrow--hot {
+  background: #111;
+  border-color: rgba(255, 111, 0, 0.4);
+}
+.floorback__tiles {
+  position: absolute;
+  bottom: 66px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 14px;
+}
+.ghosttile {
+  width: clamp(96px, 16vw, 150px);
+  height: 70px;
+  border-radius: 10px;
+  background: #0f0f0f;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+/* the glass */
+.floorscrim {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(58% 54% at 50% 54%, rgba(6, 6, 6, 0.15), rgba(6, 6, 6, 0.9) 72%);
+}
+/* sharp layer */
+.lockedfloor .ticker {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  right: 14px;
+  z-index: 3;
+  background: rgba(10, 10, 10, 0.66);
+}
+.lockbox {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -46%);
+  width: min(460px, 92%);
   text-align: center;
+  z-index: 2;
 }
-.empty__lock {
-  font-size: 26px;
-  opacity: 0.7;
+.lockbox__tile {
+  width: 78px;
+  height: 78px;
+  margin: 0 auto 22px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #141414, #0a0a0a);
+  border: 1px solid rgba(255, 111, 0, 0.28);
+  display: grid;
+  place-items: center;
+  box-shadow: 0 0 40px rgba(255, 111, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  animation: lockfloat 5s ease-in-out infinite;
 }
-.empty__connect {
+@keyframes lockfloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-7px); }
+}
+.lockbox__kicker {
   font-family: var(--font-mono);
-  font-size: 12px;
-  letter-spacing: 0.08em;
+  font-size: 10px;
+  letter-spacing: 0.3em;
   text-transform: uppercase;
-  color: var(--brand-black, #060606);
+  color: var(--accent);
+  margin-bottom: 14px;
+}
+.lockbox__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(38px, 7vw, 52px);
+  line-height: 0.96;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+.lockbox__title em {
+  font-style: normal;
+  color: var(--accent);
+}
+.lockbox__lede {
+  font-size: 14px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.55);
+  margin: 16px auto 26px;
+  max-width: 360px;
+}
+.lockbox__lede b { color: var(--text-primary); }
+.lockbox__cta {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: #0a0a0a;
   background: var(--accent);
   border: none;
-  border-radius: var(--radius-sm);
-  padding: 9px 18px;
+  border-radius: 10px;
+  padding: 15px 40px;
   cursor: pointer;
-  transition: filter 0.2s, opacity 0.2s;
+  box-shadow: 0 0 34px rgba(255, 111, 0, 0.5);
+  transition: filter 0.2s, transform 0.15s, opacity 0.2s;
 }
-.empty__connect:hover:not(:disabled) {
+.lockbox__cta:hover:not(:disabled) {
   filter: brightness(1.08);
+  transform: translateY(-1px);
 }
-.empty__connect:disabled {
-  opacity: 0.6;
-  cursor: default;
+.lockbox__cta:disabled { opacity: 0.6; cursor: default; }
+.lockbox__foot {
+  margin-top: 18px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+@media (max-width: 700px) {
+  .floorback__stack { display: none; }
+  .floorback__wheel { left: -90px; }
 }
 .tryit__error {
   margin-top: 14px;
@@ -912,47 +1052,72 @@
   z-index: 2;
 }
 
-/* progressive jackpot bar */
+/* progressive jackpot — incandescent bulb-marquee sign (design pick 1d) */
 .jpot {
+  position: relative;
   display: flex;
-  align-items: baseline;
-  gap: 14px;
-  padding: 10px 16px;
-  border: 1px solid var(--border-focus);
-  border-radius: var(--radius-md);
-  background:
-    radial-gradient(120% 160% at 50% 0%, rgba(255, 111, 0, 0.12), transparent 60%),
-    rgba(0, 0, 0, 0.3);
-  animation: jpot-glow 2.6s ease-in-out infinite;
+  align-items: center;
+  gap: 18px;
+  margin: 7px 0; /* room for the bulb strips */
+  padding: 16px 26px;
+  border: 2px solid rgba(255, 111, 0, 0.5);
+  border-radius: 14px;
+  background: radial-gradient(120% 160% at 50% 0%, rgba(255, 111, 0, 0.18), rgba(9, 9, 9, 0.9));
+  box-shadow: 0 0 50px rgba(255, 111, 0, 0.2);
 }
 @keyframes jpot-glow {
   0%, 100% { box-shadow: 0 0 0 rgba(255, 111, 0, 0); }
   50% { box-shadow: 0 0 18px rgba(255, 111, 0, 0.14); }
 }
+.jpot__bulbs {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  height: 14px;
+  border-radius: 7px;
+  pointer-events: none;
+  background: radial-gradient(circle at 7px 7px, #ffd9a8 38%, #7a4e1c 40%, transparent 45%) 0 0 / 24px 14px;
+  animation: bulbpulse 1.6s ease-in-out infinite;
+}
+.jpot__bulbs--top { top: -7px; }
+.jpot__bulbs--bottom { bottom: -7px; animation-delay: 0.8s; }
+@keyframes bulbpulse {
+  0%, 100% { opacity: 0.9; box-shadow: 0 0 10px rgba(255, 209, 140, 0.5); }
+  50% { opacity: 0.45; box-shadow: 0 0 3px rgba(255, 209, 140, 0.2); }
+}
 .jpot__label {
   font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.22em;
+  font-size: 11px;
+  letter-spacing: 0.28em;
   text-transform: uppercase;
-  color: var(--text-muted);
-  white-space: nowrap;
+  color: #ff9a4d;
+  line-height: 1.7;
 }
 .jpot__amount {
+  margin: 0 auto;
   font-family: var(--font-display);
-  font-size: 24px;
-  letter-spacing: 0.04em;
+  font-size: clamp(34px, 6vw, 54px);
+  line-height: 0.9;
   color: var(--accent);
-  text-shadow: 0 0 14px rgba(255, 111, 0, 0.35);
+  animation: tglow 3s ease-in-out infinite;
+}
+.jpot__amount em { font-style: normal; font-size: 0.5em; }
+@keyframes tglow {
+  0%, 100% { text-shadow: 0 0 16px rgba(255, 111, 0, 0.45); }
+  50% { text-shadow: 0 0 32px rgba(255, 111, 0, 0.85), 0 0 60px rgba(255, 111, 0, 0.35); }
 }
 .jpot__hint {
-  margin-left: auto;
   font-family: var(--font-mono);
   font-size: 10.5px;
-  color: var(--text-faint);
-  white-space: nowrap;
+  letter-spacing: 0.14em;
+  color: var(--text-muted);
+  text-align: right;
+  line-height: 1.7;
+  max-width: 140px;
 }
 @media (max-width: 560px) {
   .jpot__hint { display: none; }
+  .jpot__amount { margin: 0 0 0 auto; }
 }
 
 /* jackpot hit banner */
@@ -1136,7 +1301,10 @@
   .app::after,
   .hdr::after,
   .ticker__track,
-  .jpot {
+  .jpot__bulbs,
+  .jpot__amount,
+  .lockbox__tile,
+  .floorback__wheel {
     animation: none !important;
   }
 }
